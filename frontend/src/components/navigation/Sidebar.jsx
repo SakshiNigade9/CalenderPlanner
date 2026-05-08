@@ -383,11 +383,7 @@ useEffect(() => {
 
                   ? "..."
 
-                  : profile?.role === "admin"
-
-                    ? "ADMIN"
-
-                    : "STUDENT"
+                  : profile?.role?.toUpperCase()
               }
 
               </span>
@@ -407,20 +403,47 @@ useEffect(() => {
           {
   menuItems
 
-    .filter((item) => {
+.filter((item) => {
 
-      if (
-        item.title === "Admin"
-      ) {
+  // ADMIN
 
-        return (
-          profile?.role ===
-          "admin"
-        )
-      }
+  if (
+    profile?.role === "admin"
+  ) {
 
-      return true
-    })
+    return true
+  }
+
+  // PRESIDENT
+
+  if (
+    profile?.role === "president"
+  ) {
+
+    return (
+      item.title !== "Admin"
+    )
+  }
+
+  // WARRIOR
+
+  if (
+    profile?.role === "warrior"
+  ) {
+
+    return [
+
+      "Dashboard",
+      "Activities",
+      "Settings",
+
+    ].includes(
+      item.title
+    )
+  }
+
+  return false
+})    
 
     .map((
             item,

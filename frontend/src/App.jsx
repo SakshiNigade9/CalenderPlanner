@@ -9,9 +9,9 @@ import { useEffect, useState } from "react"
 
 import { supabase } from "./lib/supabase"
 
-import DashboardPage from "./pages/dashboard/DashboardPage"
+import AdminDashboard from "./pages/dashboard/AdminDashboard"
 
-import ActivitiesPage from "./pages/activities/ActivitiesPage"
+import TasksPage from "./pages/activities/TasksPage"
 
 import AuthPage from "./pages/auth/AuthPage"
 
@@ -25,12 +25,46 @@ import SettingsPage from "./pages/settings/SettingsPage"
 
 import AdminPage from "./pages/admin/AdminPage"
 
+import PresidentDashboard from "./pages/dashboard/PresidentDashboard"
+
+import WarriorDashboard from "./pages/dashboard/WarriorDashboard"
+
 function App() {
 
   const [session, setSession] =
     useState(null)
 
+  const [profile, setProfile] =
+    useState(null)
+
   // CHECK SESSION
+
+  const fetchProfile =
+  async (userId) => {
+
+    const {
+      data,
+      error,
+    } = await supabase
+
+      .from("profiles")
+
+      .select("*")
+
+      .eq("id", userId)
+
+      .single()
+
+    if (!error) {
+
+      setProfile(data)
+
+      console.log(
+       "PROFILE:",
+         data
+      )
+    }
+  }
 
   useEffect(() => {
 
@@ -42,6 +76,13 @@ function App() {
         setSession(
           data.session
         )
+
+        if (data.session?.user) {
+
+  fetchProfile(
+    data.session.user.id
+  )
+}
       })
 
     const {
@@ -51,12 +92,19 @@ function App() {
     } = supabase.auth.onAuthStateChange(
 
       (
-        _event,
-        session
-      ) => {
+  _event,
+  session
+) => {
 
-        setSession(session)
-      }
+  setSession(session)
+
+  if (session?.user) {
+
+    fetchProfile(
+      session.user.id
+    )
+  }
+}
     )
 
     return () => {
@@ -100,14 +148,26 @@ function App() {
 
           <Routes>
 
-  <Route
-    path="/"
-    element={<DashboardPage />}
-  />
+        <Route
+  path="/"
+
+  element={
+
+    profile?.role === "admin"
+
+      ? <AdminDashboard />
+
+      : profile?.role === "president"
+
+      ? <PresidentDashboard />
+
+      : <WarriorDashboard />
+  }
+/>
 
   <Route
     path="/activities"
-    element={<ActivitiesPage />}
+    element={<TasksPage />}
   />
 
   <Route
@@ -130,9 +190,17 @@ function App() {
     element={<Navigate to="/" />}
   />
 
-  <Route
-    path="/admin"
-    element={<AdminPage />}
+<Route
+  path="/admin"
+
+  element={
+
+    profile?.role === "admin"
+
+      ? <AdminPage />
+
+      : <Navigate to="/" />
+  }
 />
 
 </Routes>

@@ -21,7 +21,7 @@ import AddActivityModal from "../../components/modals/AddActivityModal"
 
 import { supabase } from "../../lib/supabase"
 
-function ActivitiesPage() {
+function TasksPage() {
 
   const [user, setUser] =
   useState(null)
@@ -57,6 +57,18 @@ function ActivitiesPage() {
 
 if (!user) {
 
+  const {
+  data: profile,
+} = await supabase
+
+  .from("profiles")
+
+  .select("*")
+
+  .eq("id", user.id)
+
+  .single()
+
   setActivities([])
 
   setLoading(false)
@@ -72,7 +84,7 @@ const {
 
   .from("profiles")
 
-  .select("role")
+  .select("*")
 
   .eq("id", user.id)
 
@@ -80,13 +92,41 @@ const {
 
 let query = supabase
 
-  .from("activities")
+  .from("tasks")
 
   .select("*")
 
 // ADMIN → ALL ACTIVITIES
 
-if (profile?.role !== "admin") {
+// ADMIN → ALL TASKS
+
+if (
+  profile?.role ===
+  "admin"
+) {
+
+  // no filtering
+}
+
+// PRESIDENT → COLLEGE TASKS
+
+else if (
+  profile?.role ===
+  "president"
+) {
+
+  query = query.eq(
+    "college_id",
+    profile.college_id
+  )
+}
+
+// WARRIOR → OWN TASKS
+
+else if (
+  profile?.role ===
+  "warrior"
+) {
 
   query = query.eq(
     "user_id",
@@ -149,7 +189,7 @@ getUser()
         {
           event: "*",
           schema: "public",
-          table: "activities",
+          table: "tasks",
         },
 
         () => {
@@ -192,9 +232,21 @@ if (!user) {
   return
 }
 
+const {
+  data: profile,
+} = await supabase
+
+  .from("profiles")
+
+  .select("*")
+
+  .eq("id", user.id)
+
+  .single()
+
 const { error } =
   await supabase
-    .from("activities")
+    .from("tasks")
         .insert([
           {
             title:
@@ -217,11 +269,29 @@ const { error } =
             description:
               newActivity.description || "",
 
+            priority:
+              newActivity.priority || "medium",
+
+            deadline:
+              newActivity.deadline || null,
+
                 status:
                   "planned",
 
                 created_by:
                   user.id,
+
+                assigned_to:
+                  newActivity.assigned_to || user.id,
+
+                assigned_college_id:
+                  profile?.college_id || null,
+
+                assigned_team_id:
+                  profile?.team_id || null,
+
+                user_id:
+                user.id,  
           },
         ])
 
@@ -258,7 +328,7 @@ const { error } =
 
     const { error } =
       await supabase
-        .from("activities")
+        .from("tasks")
         .update({
           title:
             updatedActivity.title,
@@ -334,7 +404,7 @@ const { error } =
   error
 } =
 await supabase
-  .from("activities")
+  .from("tasks")
   .delete()
   .eq("id", id)
 
@@ -378,7 +448,7 @@ const handleStatusToggle = async (
 
   const { error } =
     await supabase
-      .from("activities")
+      .from("tasks")
       .update({
         status: newStatus,
       })
@@ -420,6 +490,88 @@ const handleStatusToggle = async (
 
     toast.success(
       `Activity marked as ${newStatus}`
+    )
+  }
+}
+
+// UPDATE PROGRESS
+
+const handleProgressUpdate = async (
+  activity,
+  amount
+) => {
+
+  const newProgress =
+
+    Math.min(
+      100,
+
+      Math.max(
+        0,
+
+        (activity.progress || 0)
+        + amount
+      )
+    )
+
+  const newStatus =
+
+    newProgress === 100
+
+      ? "completed"
+
+      : "planned"
+
+  const { error } =
+    await supabase
+
+      .from("tasks")
+
+      .update({
+
+        progress:
+          newProgress,
+
+        status:
+          newStatus,
+      })
+
+      .eq(
+        "id",
+        activity.id
+      )
+
+  if (error) {
+
+    toast.error(
+      "Failed to update progress"
+    )
+
+  } else {
+
+    setActivities((prev) =>
+
+      prev.map((item) =>
+
+        item.id === activity.id
+
+          ? {
+
+              ...item,
+
+              progress:
+                newProgress,
+
+              status:
+                newStatus,
+            }
+
+          : item
+      )
+    )
+
+    toast.success(
+      `Progress updated to ${newProgress}%`
     )
   }
 }
@@ -1016,7 +1168,7 @@ const handleStatusToggle = async (
                   scale: 1.02,
                 }}
 
-                className="
+                className={`
                   group
                   relative
                   rounded-3xl
@@ -1028,7 +1180,27 @@ const handleStatusToggle = async (
                   p-7
                   shadow-2xl
                   backdrop-blur-2xl
-                "
+                  
+                  ${
+                    activity.deadline &&
+
+                    new Date(activity.deadline)
+                    < new Date()
+
+                    &&
+
+                    activity.status !==
+                    "completed"
+
+                      ? `
+                        border-red-500
+                        shadow-red-500/40
+                      `
+
+                      : ""
+                  }
+
+                `}
               >
 
                 <div className="
@@ -1243,6 +1415,204 @@ const handleStatusToggle = async (
                 </h2>
 
                 <div className="
+                  mb-4
+                ">
+
+                <span className={`
+                  px-4
+                  py-2
+                  rounded-full
+                  text-sm
+                  font-semibold
+                  border
+
+                   ${
+                     activity.priority === "high"
+
+                       ? `
+                          bg-red-500/10
+                          text-red-300
+                          border-red-500/20
+                        `
+
+                        : activity.priority === "medium"
+
+                        ? `
+                          bg-yellow-500/10
+                          text-yellow-300
+                          border-yellow-500/20
+                        `
+
+                        : `
+                          bg-green-500/10
+                          text-green-300
+                          border-green-500/20
+                        `
+                    }
+                  `}>
+
+                    {activity.priority || "medium"} Priority
+
+                  </span>
+
+                </div>
+
+                {/* Progress Section */}
+
+<div className="
+  mb-6
+">
+
+  <div className="
+    flex
+    items-center
+    justify-between
+    mb-2
+  ">
+
+    <span className="
+      text-sm
+      text-gray-400
+    ">
+      Progress
+    </span>
+
+    <span className="
+      text-sm
+      text-red-400
+      font-semibold
+    ">
+      {activity.progress || 0}%
+    </span>
+
+  </div>
+
+  <div className="
+    w-full
+    h-3
+    rounded-full
+    bg-white/10
+    overflow-hidden
+  ">
+
+    <div
+
+      className="
+        h-full
+        rounded-full
+        bg-gradient-to-r
+        from-red-500
+        to-pink-500
+        transition-all
+        duration-500
+      "
+
+      style={{
+        width: `${
+          activity.progress || 0
+        }%`
+      }}
+    />
+
+  </div>
+
+  <div className="
+  flex
+  items-center
+  gap-3
+  mt-4
+">
+
+  <button
+
+    onClick={() =>
+      handleProgressUpdate(
+        activity,
+        -10
+      )
+    }
+
+    className="
+      px-4
+      py-2
+      rounded-xl
+      bg-white/5
+      border
+      border-white/10
+      text-white
+      hover:bg-white/10
+      transition
+    "
+  >
+    -10%
+  </button>
+
+  <button
+
+    onClick={() =>
+      handleProgressUpdate(
+        activity,
+        10
+      )
+    }
+
+    className="
+      px-4
+      py-2
+      rounded-xl
+      bg-red-500/10
+      border
+      border-red-500/20
+      text-red-300
+      hover:bg-red-500/20
+      transition
+    "
+  >
+    +10%
+  </button>
+
+</div>
+
+<div className="
+  mt-4
+  p-4
+  rounded-2xl
+  bg-white/5
+  border
+  border-white/10
+">
+
+  <p className="
+    text-sm
+    text-gray-300
+    leading-relaxed
+  ">
+
+    {
+
+      activity.progress >= 100
+
+        ? "✅ AI Insight: Task completed successfully."
+
+        : activity.progress >= 70
+
+        ? "⚡ AI Insight: You're close to completion. Keep momentum high."
+
+        : activity.progress >= 40
+
+        ? "📈 AI Insight: Steady progress detected. Stay consistent."
+
+        : "🚨 AI Insight: You're behind schedule. Increase progress to stay on track."
+
+    }
+
+  </p>
+
+</div>
+
+</div>
+
+                <div className="
                   space-y-4
                 ">
 
@@ -1259,6 +1629,85 @@ const handleStatusToggle = async (
                     </span>
 
                   </div>
+
+                  {
+  activity.deadline && (
+
+    <div className="
+      flex
+      items-center
+      gap-3
+      text-sm
+    ">
+
+      <span className="
+        text-red-400
+        font-semibold
+      ">
+        Deadline:
+      </span>
+
+      <span className="
+        text-gray-300
+      ">
+
+        {
+
+          Math.ceil(
+
+            (
+              new Date(activity.deadline)
+              - new Date()
+            )
+
+            /
+
+            (
+              1000 * 60 * 60 * 24
+            )
+
+          ) > 0
+
+            ? `${Math.ceil(
+
+                (
+                  new Date(activity.deadline)
+                  - new Date()
+                )
+
+                /
+
+                (
+                  1000 * 60 * 60 * 24
+                )
+
+              )} days left`
+
+            : `Overdue by ${Math.abs(
+
+                Math.ceil(
+
+                  (
+                    new Date(activity.deadline)
+                    - new Date()
+                  )
+
+                  /
+
+                  (
+                    1000 * 60 * 60 * 24
+                  )
+
+                )
+
+              )} days`
+        }
+
+      </span>
+
+    </div>
+  )
+}
 
                   <div className="
                     flex
@@ -1291,6 +1740,57 @@ const handleStatusToggle = async (
                     </span>
 
                   </div>
+
+                  <div className="
+                      flex
+                      items-center
+                      gap-3
+                      text-gray-400
+                    ">
+
+                  <span className="
+                      text-red-400
+                      font-semibold
+                    ">
+                    Assigned To:
+                  </span>
+
+                      <span>
+                        {activity.assigned_to || "Unassigned"}
+                      </span>
+
+                    </div>
+
+                    {
+  activity.deadline &&
+
+  new Date(activity.deadline)
+  < new Date()
+
+  &&
+
+  activity.status !==
+  "completed"
+
+  && (
+
+    <div className="
+      mt-4
+      px-4
+      py-3
+      rounded-2xl
+      bg-red-500/10
+      border
+      border-red-500/20
+      text-red-300
+      font-medium
+    ">
+
+      🚨 This task is overdue
+
+    </div>
+  )
+}
 
                 </div>
 
@@ -1328,4 +1828,4 @@ const handleStatusToggle = async (
   )
 }
 
-export default ActivitiesPage
+export default TasksPage

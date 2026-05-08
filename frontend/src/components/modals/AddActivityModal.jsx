@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react"
 
+import { supabase } from "../../lib/supabase"
+
 import { motion } from "framer-motion"
 
 import {
@@ -17,14 +19,29 @@ function AddActivityModal({
   editingActivity,
 }) {
 
-  const [formData, setFormData] = useState({
-    id: "",
-    title: "",
-    date: "",
-    participants: "",
-    location: "",
-    description: "",
-  })
+const [formData, setFormData] = useState({
+
+  id: "",
+
+  title: "",
+
+  date: "",
+
+  participants: "",
+
+  location: "",
+
+  description: "",
+
+  priority: "medium",
+
+  deadline: "",
+
+  assigned_to: "",
+})
+
+const [users, setUsers] =
+  useState([])
 
   // PREFILL FORM WHEN EDITING
 
@@ -49,21 +66,119 @@ function AddActivityModal({
 
         description:
           editingActivity.description || "",
+
+        priority:
+          editingActivity.priority || "medium",
+
+        deadline:
+          editingActivity.deadline || "",  
+
+        assigned_to:
+          editingActivity.assigned_to || "",  
       })
 
     } else {
 
       setFormData({
         id: "",
+
         title: "",
+
         date: "",
-        participants: "",
+
+       participants: "",
+
         location: "",
+
         description: "",
+
+        priority: "medium",
+
+        deadline: "",
+
+        assigned_to: "",
       })
     }
 
   }, [editingActivity, isOpen])
+
+  useEffect(() => {
+
+  const fetchUsers =
+    async () => {
+
+const {
+  data: {
+    user
+  }
+} = await supabase.auth.getUser()
+
+if (!user) return
+
+const {
+  data: currentProfile
+} = await supabase
+
+  .from("profiles")
+
+  .select("*")
+
+  .eq("id", user.id)
+
+  .single()
+
+let query = supabase
+
+  .from("profiles")
+
+  .select("*")
+
+// PRESIDENT
+
+if (
+  currentProfile?.role ===
+  "president"
+) {
+
+  query = query
+
+    .eq(
+      "college_id",
+      currentProfile.college_id
+    )
+
+    .eq(
+      "role",
+      "warrior"
+    )
+}
+
+// ADMIN
+
+else if (
+  currentProfile?.role ===
+  "admin"
+) {
+
+  query = query.eq(
+    "role",
+    "warrior"
+  )
+}
+
+const {
+  data
+} = await query
+
+      if (data) {
+
+        setUsers(data)
+      }
+    }
+
+  fetchUsers()
+
+}, [])
 
   if (!isOpen) return null
 
@@ -139,20 +254,26 @@ function AddActivityModal({
           duration: 0.3,
         }}
 
-        className="
-          relative
-          w-full
-          max-w-3xl
-          rounded-3xl
-          border
-          border-white/10
-          bg-gradient-to-br
-          from-[#111827]
-          to-[#1e293b]
-          p-8
-          shadow-2xl
-          overflow-hidden
-        "
+className="
+  relative
+  w-full
+  max-w-3xl
+  max-h-[90vh]
+  overflow-y-auto
+  overflow-x-hidden
+  custom-scrollbar
+  scrollbar-thin
+  scrollbar-thumb-red-500/20
+  scrollbar-track-transparent
+  rounded-3xl
+  border
+  border-white/10
+  bg-gradient-to-br
+  from-[#111827]
+  to-[#1e293b]
+  p-8
+  shadow-2xl
+"
       >
 
         {/* Glow */}
@@ -366,6 +487,157 @@ function AddActivityModal({
             </div>
 
           </div>
+
+{/* Priority */}
+
+<div>
+
+  <label className="
+    block
+    text-gray-300
+    mb-3
+  ">
+    Priority
+  </label>
+
+  <select
+
+    name="priority"
+
+    value={formData.priority}
+
+    onChange={handleChange}
+
+    className="
+      w-full
+      bg-black/20
+      border
+      border-white/10
+      rounded-2xl
+      px-5
+      py-4
+      text-white
+      outline-none
+    "
+  >
+
+    <option value="low">
+      Low
+    </option>
+
+    <option value="medium">
+      Medium
+    </option>
+
+    <option value="high">
+      High
+    </option>
+
+  </select>
+
+</div>
+
+{/* Deadline */}
+
+<div>
+
+  <label className="
+    block
+    text-gray-300
+    mb-3
+  ">
+    Deadline
+  </label>
+
+  <input
+
+    type="datetime-local"
+
+    name="deadline"
+
+    value={formData.deadline}
+
+    onChange={handleChange}
+
+    className="
+      w-full
+      bg-black/20
+      border
+      border-white/10
+      rounded-2xl
+      px-5
+      py-4
+      text-white
+      outline-none
+    "
+  />
+
+</div>
+
+{/* Assign Warrior */}
+
+<div className="col-span-2">
+
+  <label className="
+    block
+    text-gray-300
+    mb-3
+  ">
+    Assign Warrior
+  </label>
+
+  <select
+
+    name="assigned_to"
+
+    value={formData.assigned_to}
+
+    onChange={handleChange}
+
+    className="
+      w-full
+      bg-black/20
+      border
+      border-white/10
+      rounded-2xl
+      px-5
+      py-4
+      text-white
+      outline-none
+    "
+  >
+
+    <option value="">
+      Select Warrior
+    </option>
+
+{
+  users
+
+    .filter((user) =>
+      user.role === "warrior"
+    )
+
+    .map((user) => (
+
+        <option
+          key={user.id}
+          value={user.id}
+        >
+
+          {user.full_name}
+          {" "}
+          (
+          {user.role}
+          )
+
+        </option>
+      ))
+    }
+
+  </select>
+
+</div>
 
           {/* Location */}
 

@@ -27,7 +27,7 @@ import {
   Bar,
 } from "recharts"
 
-function DashboardPage() {
+function AdminDashboard() {
 
   const [activities, setActivities] =
     useState([])
@@ -38,7 +38,7 @@ function DashboardPage() {
 
     const { data, error } =
       await supabase
-        .from("activities")
+        .from("tasks")
         .select("*")
 
     if (error) {
@@ -69,7 +69,7 @@ function DashboardPage() {
         {
           event: "*",
           schema: "public",
-          table: "activities",
+          table: "tasks",
         },
 
         () => {
@@ -207,6 +207,61 @@ function DashboardPage() {
 
   // STATS
 
+  const totalColleges =
+
+  new Set(
+
+    activities.map(
+      (activity) =>
+
+        activity.assigned_college_id
+    )
+
+  ).size
+
+const overdueTasks =
+
+  activities.filter(
+    (activity) =>
+
+      activity.deadline
+
+      &&
+
+      new Date(
+        activity.deadline
+      ) < new Date()
+
+      &&
+
+      activity.status !==
+      "completed"
+  ).length
+
+const totalWarriors =
+
+  new Set(
+
+    activities.map(
+      (activity) =>
+
+        activity.assigned_to
+    )
+
+  ).size
+
+const totalPresidents =
+
+  new Set(
+
+    activities.map(
+      (activity) =>
+
+        activity.created_by
+    )
+
+  ).size
+
   const stats = [
     {
       title: "Total Activities",
@@ -243,6 +298,42 @@ function DashboardPage() {
 
       icon: Users,
     },
+
+    {
+  title: "Total Colleges",
+
+  value:
+    totalColleges,
+
+  icon: Activity,
+},
+
+{
+  title: "Overdue Tasks",
+
+  value:
+    overdueTasks,
+
+  icon: CalendarDays,
+},
+
+{
+  title: "Total Warriors",
+
+  value:
+    totalWarriors,
+
+  icon: Users,
+},
+
+{
+  title: "Active Presidents",
+
+  value:
+    totalPresidents,
+
+  icon: BarChart3,
+},
   ]
 
   return (
@@ -613,6 +704,50 @@ function DashboardPage() {
                 </div>
 
               </div>
+
+              <div className="
+  bg-[#0f172a]/80
+  border
+  border-red-500/10
+  rounded-2xl
+  p-6
+  backdrop-blur-xl
+">
+
+  <h3 className="
+    text-white
+    font-semibold
+    mb-2
+    text-lg
+  ">
+    Workload Risk Detection
+  </h3>
+
+  <p className="
+    text-gray-400
+    leading-relaxed
+  ">
+
+    AI detected
+
+    {" "}
+
+    <span className="
+      text-red-400
+      font-semibold
+    ">
+      {overdueTasks}
+    </span>
+
+    {" "}
+
+    overdue tasks across the organization.
+
+    Teams with repeated delays should receive workload balancing and deadline restructuring.
+
+  </p>
+
+</div>
 
             </div>
 
@@ -1025,4 +1160,4 @@ function DashboardPage() {
   )
 }
 
-export default DashboardPage
+export default AdminDashboard
