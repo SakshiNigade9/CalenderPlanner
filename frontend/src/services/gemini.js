@@ -9,6 +9,15 @@ export const generateAIReport =
   async (activities) => {
 
     try {
+      if (
+        !activities ||
+        activities.length === 0
+        ) {
+
+  return (
+    "No activity data available for AI analysis."
+  )
+}
 
       const activityData =
 
@@ -32,25 +41,52 @@ export const generateAIReport =
           })
         )
 
-      const prompt = `
-Analyze this campus activity data.
+const prompt = `
 
-Return:
-- short executive summary
-- participation insight
-- one recommendation
+You are CampusFlow AI,
+an advanced university
+operations intelligence system.
 
-Keep response under 120 words.
+Analyze the provided
+campus task and activity data.
 
-Data:
+Your response must include:
+
+1. Executive Summary
+2. Participation Analysis
+3. Productivity Insight
+4. One Strategic Recommendation
+
+Rules:
+- Keep response under 120 words
+- Be concise and professional
+- Focus on operational insights
+- Avoid generic statements
+- Mention overdue or low-performance risks if detected
+
+Campus Activity Data:
 ${JSON.stringify(activityData)}
+
 `
+
+      const controller =
+  new AbortController()
+
+const timeoutId =
+  setTimeout(() => {
+
+    controller.abort()
+
+  }, 10000)
 
       const response =
         await fetch(
           API_URL,
           {
             method: "POST",
+
+            signal:
+            controller.signal,
 
             headers: {
               "Content-Type":
@@ -74,33 +110,76 @@ ${JSON.stringify(activityData)}
 
       const data =
         await response.json()
+        clearTimeout(timeoutId)
         console.log(
   "Gemini Response:",
   data
 )
 
-      if (data.error) {
+if (data.error) {
 
   console.error(
     "Gemini API Error:",
     data.error
   )
 
-return (
-  "AI servers are currently busy. Please try again in a few minutes."
-)
+  const errorMessage =
+
+    data.error.message || ""
+
+  if (
+    errorMessage.includes(
+      "quota"
+    )
+  ) {
+
+    return (
+      "AI quota exceeded. Please try again later."
+    )
+  }
+
+  if (
+    errorMessage.includes(
+      "API key"
+    )
+  ) {
+
+    return (
+      "Invalid AI configuration detected."
+    )
+  }
+
+  return (
+    "AI servers are currently busy. Please try again shortly."
+  )
 }
 
-return (
+const aiText =
 
   data?.candidates?.[0]
     ?.content?.parts?.[0]
     ?.text
 
-  ||
+if (
+  !aiText ||
+  typeof aiText !== "string"
+) {
 
-  "AI analysis unavailable."
-)
+  return (
+    "AI analysis unavailable at the moment."
+  )
+}
+
+if (
+  aiText.trim().length < 10
+) {
+
+  return (
+    "AI generated an incomplete response."
+  )
+}
+
+return aiText.trim()
 
     } catch (error) {
 

@@ -127,48 +127,19 @@ const {
 
   .single()
 
-let query = supabase
+
+const {
+  data
+} = await supabase
 
   .from("profiles")
 
   .select("*")
 
-// PRESIDENT
-
-if (
-  currentProfile?.role ===
-  "president"
-) {
-
-  query = query
-
-    .eq(
-      "college_id",
-      currentProfile.college_id
-    )
-
-    .eq(
-      "role",
-      "warrior"
-    )
-}
-
-// ADMIN
-
-else if (
-  currentProfile?.role ===
-  "admin"
-) {
-
-  query = query.eq(
+  .eq(
     "role",
     "warrior"
   )
-}
-
-const {
-  data
-} = await query
 
       if (data) {
 
@@ -209,14 +180,22 @@ const {
       return
     }
 
-    const activityData = {
+const activityData = {
 
-      ...formData,
+  ...formData,
 
-      category: "Technical",
+  assigned_user_name:
 
-      status: "planned",
-    }
+    users.find(
+      (u) =>
+        u.id ===
+        formData.assigned_to
+    )?.full_name || "",
+
+  category: "Technical",
+
+  status: "planned",
+}
 
     // SEND DATA TO PARENT
 
@@ -603,11 +582,18 @@ className="
       px-5
       py-4
       text-white
+      appearance-none
       outline-none
     "
   >
 
-    <option value="">
+    <option
+  value=""
+  className="
+    bg-[#111827]
+    text-white
+  "
+>
       Select Warrior
     </option>
 
@@ -623,6 +609,10 @@ className="
         <option
           key={user.id}
           value={user.id}
+
+          className="
+          bg-[#111827]
+          text-white"
         >
 
           {user.full_name}

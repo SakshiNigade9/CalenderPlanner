@@ -26,6 +26,9 @@ function TasksPage() {
   const [user, setUser] =
   useState(null)
 
+  const [profile, setProfile] =
+  useState(null)
+
   const [isModalOpen, setIsModalOpen] =
     useState(false)
 
@@ -68,6 +71,8 @@ if (!user) {
   .eq("id", user.id)
 
   .single()
+
+  setProfile(profile)
 
   setActivities([])
 
@@ -129,7 +134,7 @@ else if (
 ) {
 
   query = query.eq(
-    "user_id",
+    "assigned_to",
     user.id
   )
 }
@@ -142,6 +147,16 @@ const {
   {
     ascending: false,
   }
+)
+
+console.log(
+  "LOGGED USER:",
+  user.id
+)
+
+console.log(
+  "FETCHED TASKS:",
+  data
 )
 
     if (error) {
@@ -283,6 +298,9 @@ const { error } =
 
                 assigned_to:
                   newActivity.assigned_to || user.id,
+
+                assigned_user_name:
+                  newActivity.assigned_user_name || "",  
 
                 assigned_college_id:
                   profile?.college_id || null,
@@ -1313,97 +1331,103 @@ const handleProgressUpdate = async (
 
                   </div>
 
-                  <div className="
-                    flex
-                    items-center
-                  ">
+{
+  profile?.role !==
+  "warrior" && (
 
-                    <motion.button
+    <div className="
+      flex
+      items-center
+    ">
 
-                      whileHover={{
-                        scale: 1.1,
-                      }}
+      <motion.button
 
-                      whileTap={{
-                        scale: 0.9,
-                      }}
+        whileHover={{
+          scale: 1.1,
+        }}
 
-                      onClick={() => {
+        whileTap={{
+          scale: 0.9,
+        }}
 
-                        setEditingActivity(
-                          activity
-                        )
+        onClick={() => {
 
-                        setIsModalOpen(true)
-                      }}
+          setEditingActivity(
+            activity
+          )
 
-                      className="
-                        opacity-40
-                        group-hover:opacity-100
-                        transition-all
-                        duration-300
-                        w-11
-                        h-11
-                        rounded-2xl
-                        bg-blue-500/10
-                        border
-                        border-blue-500/20
-                        flex
-                        items-center
-                        justify-center
-                        text-blue-400
-                        hover:bg-blue-500/20
-                        mr-3
-                      "
-                    >
+          setIsModalOpen(true)
+        }}
 
-                      <Pencil size={18} />
+        className="
+          opacity-40
+          group-hover:opacity-100
+          transition-all
+          duration-300
+          w-11
+          h-11
+          rounded-2xl
+          bg-blue-500/10
+          border
+          border-blue-500/20
+          flex
+          items-center
+          justify-center
+          text-blue-400
+          hover:bg-blue-500/20
+          mr-3
+        "
+      >
 
-                    </motion.button>
+        <Pencil size={18} />
 
-                    <motion.button
+      </motion.button>
 
-                      whileHover={{
-                        scale: 1.1,
-                      }}
+      <motion.button
 
-                      whileTap={{
-                        scale: 0.9,
-                      }}
+        whileHover={{
+          scale: 1.1,
+        }}
 
-                      onClick={() =>
-                        handleDeleteActivity(
-                          activity.id
-                        )
-                      }
+        whileTap={{
+          scale: 0.9,
+        }}
 
-                      className="
-                        opacity-40
-                        group-hover:opacity-100
-                        transition-all
-                        duration-300
-                        w-11
-                        h-11
-                        rounded-2xl
-                        bg-red-500/10
-                        border
-                        border-red-500/20
-                        flex
-                        items-center
-                        justify-center
-                        text-red-400
-                        hover:bg-red-500/20
-                      "
-                    >
+        onClick={() =>
+          handleDeleteActivity(
+            activity.id
+          )
+        }
 
-                      <Trash2 size={18} />
+        className="
+          opacity-40
+          group-hover:opacity-100
+          transition-all
+          duration-300
+          w-11
+          h-11
+          rounded-2xl
+          bg-red-500/10
+          border
+          border-red-500/20
+          flex
+          items-center
+          justify-center
+          text-red-400
+          hover:bg-red-500/20
+        "
+      >
 
-                    </motion.button>
+        <Trash2 size={18} />
 
-                  </div>
+      </motion.button>
 
-                </div>
+    </div>
 
+  )
+}
+                
+</div>
                 <h2 className="
                   text-2xl
                   font-bold
@@ -1756,7 +1780,7 @@ const handleProgressUpdate = async (
                   </span>
 
                       <span>
-                        {activity.assigned_to || "Unassigned"}
+                        {activity.assigned_user_name || "Unassigned"}
                       </span>
 
                     </div>

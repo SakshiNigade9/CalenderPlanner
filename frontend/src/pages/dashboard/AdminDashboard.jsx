@@ -30,7 +30,12 @@ import {
 function AdminDashboard() {
 
   const [activities, setActivities] =
+  
     useState([])
+
+  const [profiles, setProfiles] =
+
+    useState([])  
 
   // FETCH ACTIVITIES
 
@@ -51,6 +56,18 @@ function AdminDashboard() {
     } else {
 
       setActivities(data)
+
+      const {
+  data: profilesData
+} = await supabase
+
+  .from("profiles")
+
+  .select("*")
+
+setProfiles(
+  profilesData || []
+)
     }
   }
 
@@ -240,27 +257,21 @@ const overdueTasks =
 
 const totalWarriors =
 
-  new Set(
+  profiles.filter(
+    (profile) =>
 
-    activities.map(
-      (activity) =>
-
-        activity.assigned_to
-    )
-
-  ).size
+      profile.role ===
+      "warrior"
+  ).length
 
 const totalPresidents =
 
-  new Set(
+  profiles.filter(
+    (profile) =>
 
-    activities.map(
-      (activity) =>
-
-        activity.created_by
-    )
-
-  ).size
+      profile.role ===
+      "president"
+  ).length
 
   const stats = [
     {
