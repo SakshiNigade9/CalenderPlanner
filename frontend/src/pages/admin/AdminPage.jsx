@@ -1,614 +1,305 @@
-import { useEffect, useState } from "react"
-
-import {
-  motion,
-} from "framer-motion"
-
-import {
-  Shield,
-  Users,
-  Activity,
-  Crown,
-} from "lucide-react"
-
-import toast from "react-hot-toast"
-
-import { supabase } from "../../lib/supabase"
+import { useEffect, useState, useMemo } from "react";
+import { motion } from "framer-motion";
+import { Shield, Users, Activity, Crown } from "lucide-react";
+import toast from "react-hot-toast";
+import { supabase } from "../../lib/supabase";
 
 function AdminPage() {
+  const [profiles, setProfiles] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [colleges, setColleges] = useState([]);
+  const [presidents, setPresidents] = useState([]);
 
-  const [profiles, setProfiles] =
-    useState([])
+  const fetchAdminData = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-  const [activities, setActivities] =
-    useState([])
-
-  const [loading, setLoading] =
-    useState(true)
-
-  // FETCH DATA
-
-  const fetchAdminData =
-    async () => {
-
-      // GET USER
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) return
-
-      // CHECK ROLE
-
-      const {
-        data: profile,
-      } = await supabase
-
-        .from("profiles")
-
-        .select("role")
-
-        .eq("id", user.id)
-
-        .single()
-
-      if (
-        profile?.role !==
-        "admin"
-      ) {
-
-        toast.error(
-          "Access denied"
-        )
-
-        return
-      }
-
-      // FETCH USERS
-
-      const {
-        data: usersData,
-      } = await supabase
-
-        .from("profiles")
-
-        .select("*")
-
-      // FETCH ACTIVITIES
-
-      const {
-        data: activitiesData,
-      } = await supabase
-
-        .from("activities")
-
-        .select("*")
-
-      setProfiles(
-        usersData || []
-      )
-
-      setActivities(
-        activitiesData || []
-      )
-
-      setLoading(false)
+    // Security Check
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    if (profile?.role !== "admin") {
+      toast.error("Access denied");
+      setLoading(false);
+      return;
     }
 
+    setIsAuthorized(true);
+
+const [usersRes, activitiesRes, collegesRes, presidentsRes] = await Promise.all([
+
+  supabase
+    .from("profiles")
+    .select("*")
+    .order("full_name"),
+
+  supabase
+    .from("tasks")
+    .select("*"),
+
+  supabase
+    .from("colleges")
+    .select("*")
+    .order("name"),
+
+  supabase
+    .from("profiles")
+    .select("*")
+    .eq("role", "president")
+
+]);
+
+    setProfiles(usersRes.data || []);
+    setActivities(activitiesRes.data || []);
+    setColleges(collegesRes.data || []);
+    setPresidents(presidentsRes.data || []);
+
+    console.log("COLLEGES DATA:", collegesRes.data);
+    
+    setLoading(false);
+  };
+
   useEffect(() => {
+    fetchAdminData();
+  }, []);
 
-    fetchAdminData()
+  const toggleRole = async (targetProfile) => {
+    const newRole = targetProfile.role === "admin" ? "warrior" : "admin";
+    
+    const { error } = await supabase
+      .from("profiles")
+      .update({ role: newRole })
+      .eq("id", targetProfile.id);
 
-  }, [])
+    if (error) {
+      toast.error("Failed to update role");
+    } else {
+      toast.success(`Role updated to ${newRole}`);
+      setProfiles(prev => prev.map(p => p.id === targetProfile.id ? { ...p, role: newRole } : p));
+    }
+  };
 
-  // CHANGE ROLE
+  // Memoized Metrics
+  const metrics = useMemo(() => {
+    const totalParticipants = activities.reduce((sum, act) => sum + (act.audience_count || 0), 0);
+    const adminCount = profiles.filter(p => p.role === "admin").length;
+    return [
+      { title: "Platform Users", value: profiles.length, icon: Users },
+      { title: "Total Activities", value: activities.length, icon: Activity },
+      { title: "Total Reach", value: totalParticipants, icon: Shield },
+      { title: "Admin Count", value: adminCount, icon: Crown },
+    ];
+  }, [profiles, activities]);
 
-  const toggleRole = async (
-    profile
-  ) => {
+  if (loading) return <div className="p-10 text-white">Accessing Secure Feed...</div>;
+  if (!isAuthorized) return <div className="p-10 text-red-400">Unauthorized Access.</div>;
 
-    const newRole =
+  return (
+    <div className="relative space-y-8 pb-12">
+      {/* Aesthetic Background Glow */}
+      <div className="fixed top-0 left-1/3 w-[450px] h-[450px] bg-yellow-500/10 blur-[160px] rounded-full pointer-events-none" />
 
-      profile.role ===
-      "admin"
+      {/* Header */}
+      <div>
+        <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-5xl font-black text-white mb-2">
+          Admin Panel
+        </motion.h1>
+        <p className="text-gray-400 text-lg">Manage platform roles and monitor event intelligence.</p>
+      </div>
 
-        ? "student"
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        {metrics.map((card, i) => (
+          <StatCard key={i} card={card} index={i} />
+        ))}
+      </div>
 
-        : "admin"
+      {/* User Table */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-2xl p-8">
+        <h2 className="text-3xl font-bold text-white mb-8">User Management</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-white/10 text-gray-400 text-sm">
+                <th className="pb-4 font-medium">Name</th>
+                <th className="pb-4 font-medium">Handle</th>
+                <th className="pb-4 font-medium">Department</th>
+                <th className="pb-4 font-medium">Role</th>
+                <th className="pb-4 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {profiles.map((p) => (
+                <tr key={p.id} className="group hover:bg-white/[0.02] transition-colors">
+                  <td className="py-5 text-white font-medium">{p.full_name}</td>
+                  <td className="py-5 text-gray-500">@{p.username}</td>
+                  <td className="py-5 text-gray-400">{p.department || "MCA"}</td>
+                  <td className="py-5">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${
+                      p.role === 'admin' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'
+                    }`}>
+                      {p.role?.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="py-5 text-right">
+                    <button onClick={() => toggleRole(p)} className="px-4 py-2 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-xs font-bold hover:scale-105 transition-all">
+                      Toggle Role
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </motion.div>
 
-    const { error } =
-      await supabase
+      {/* COLLEGE MANAGEMENT */}
 
-        .from("profiles")
+<motion.div
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-2xl p-8"
+>
 
-        .update({
-          role: newRole,
-        })
+  <h2 className="text-3xl font-bold text-white mb-8">
+    College Chapters
+  </h2>
 
-        .eq(
-          "id",
-          profile.id
-        )
+  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+
+    {colleges.map((college) => {
+
+      const warriors = profiles.filter(
+        (p) =>
+          p.college_id === college.id &&
+          p.role === "warrior"
+      );
+
+      const president = profiles.find(
+        (p) =>
+          p.college_id === college.id &&
+          p.role === "college_coordinator"
+      );
+
+      return (
+
+        <div
+          key={college.id}
+          className="rounded-3xl border border-yellow-500/10 bg-black/20 p-6"
+        >
+
+          <h3 className="text-2xl font-black text-white mb-4">
+            {college.name}
+          </h3>
+
+          <div className="space-y-3">
+
+            <select
+
+  className="w-full mt-4 rounded-xl bg-[#0a1022] border border-white/10 px-4 py-3 text-white"
+
+  value={college.president_id || ""}
+
+  onChange={async (e) => {
+
+    const presidentId = e.target.value;
+
+    const { error } = await supabase
+      .from("colleges")
+      .update({
+        president_id: presidentId
+      })
+      .eq("id", college.id);
 
     if (error) {
 
-      toast.error(
-        "Failed to update role"
-      )
+      console.log("PRESIDENT ASSIGN ERROR:", error);
 
-    } else {
+      alert(error.message);
 
-      toast.success(
-        `Role updated to ${newRole}`
-      )
-
-      fetchAdminData()
+      return;
     }
-  }
 
-  // METRICS
+    setColleges((prev) =>
+      prev.map((c) =>
+        c.id === college.id
+          ? { ...c, president_id: presidentId }
+          : c
+      )
+    );
 
-  const totalUsers =
-    profiles.length
+    console.log("PRESIDENT ASSIGNED");
+  }}
 
-  const totalActivities =
-    activities.length
+>
 
-  const totalParticipants =
-    activities.reduce(
-      (sum, activity) =>
+  <option value="">
+    Assign President
+  </option>
 
-        sum +
-        (
-          activity.audience_count
-          || 0
-        ),
+  {presidents.map((president) => (
 
-      0
-    )
+    <option
+      key={president.id}
+      value={president.id}
+    >
+      {president.full_name}
+    </option>
 
-  const adminCount =
-    profiles.filter(
-      (p) =>
-        p.role === "admin"
-    ).length
+  ))}
 
-  const statCards = [
+</select>
 
-    {
-      title:
-        "Platform Users",
+            <div>
+              <p className="text-gray-500 text-sm">
+                President
+              </p>
 
-      value:
-        totalUsers,
+              <p className="text-white font-bold">
+                {president?.full_name || "Not Assigned"}
+              </p>
+            </div>
 
-      icon: Users,
-    },
+            <div>
+              <p className="text-gray-500 text-sm">
+                Warriors
+              </p>
 
-    {
-      title:
-        "Total Activities",
+              <p className="text-yellow-400 font-bold text-xl">
+                {warriors.length}
+              </p>
+            </div>
 
-      value:
-        totalActivities,
-
-      icon: Activity,
-    },
-
-    {
-      title:
-        "Participants",
-
-      value:
-        totalParticipants,
-
-      icon: Shield,
-    },
-
-    {
-      title:
-        "Admins",
-
-      value:
-        adminCount,
-
-      icon: Crown,
-    },
-  ]
-
-  return (
-
-    <div className="
-      relative
-      space-y-8
-    ">
-
-      {/* Glow */}
-
-      <div className="
-        fixed
-        top-0
-        left-1/3
-        w-[450px]
-        h-[450px]
-        bg-yellow-500/10
-        blur-[160px]
-        rounded-full
-        pointer-events-none
-      " />
-
-      {/* HEADER */}
-
-      <div>
-
-        <motion.h1
-
-          initial={{
-            opacity: 0,
-            y: -20,
-          }}
-
-          animate={{
-            opacity: 1,
-            y: 0,
-          }}
-
-          className="
-            text-5xl
-            font-black
-            text-white
-            mb-3
-          "
-        >
-          Admin Panel
-        </motion.h1>
-
-        <p className="
-          text-gray-400
-          text-lg
-        ">
-          Platform management and intelligence center.
-        </p>
-
-      </div>
-
-      {/* STATS */}
-
-      <div className="
-        grid
-        grid-cols-1
-        md:grid-cols-2
-        xl:grid-cols-4
-        gap-6
-      ">
-
-        {statCards.map((
-          card,
-          index
-        ) => {
-
-          const Icon =
-            card.icon
-
-          return (
-
-            <motion.div
-
-              key={index}
-
-              initial={{
-                opacity: 0,
-                y: 20,
-              }}
-
-              animate={{
-                opacity: 1,
-                y: 0,
-              }}
-
-              transition={{
-                delay:
-                  index * 0.1,
-              }}
-
-              className="
-                rounded-3xl
-                border
-                border-yellow-500/10
-                bg-white/5
-                backdrop-blur-2xl
-                p-6
-                relative
-                overflow-hidden
-              "
-            >
-
-              <div className="
-                absolute
-                top-0
-                right-0
-                w-24
-                h-24
-                bg-yellow-500/10
-                blur-3xl
-                rounded-full
-              " />
-
-              <div className="
-                relative
-                z-10
-              ">
-
-                <div className="
-                  w-14
-                  h-14
-                  rounded-2xl
-                  bg-gradient-to-br
-                  from-yellow-500
-                  to-orange-500
-                  flex
-                  items-center
-                  justify-center
-                  mb-6
-                ">
-
-                  <Icon
-                    size={28}
-                    className="
-                      text-white
-                    "
-                  />
-
-                </div>
-
-                <p className="
-                  text-gray-400
-                  text-sm
-                  mb-2
-                ">
-                  {card.title}
-                </p>
-
-                <h2 className="
-                  text-5xl
-                  font-black
-                  text-white
-                ">
-                  {card.value}
-                </h2>
-
-              </div>
-
-            </motion.div>
-          )
-        })}
-
-      </div>
-
-      {/* USERS TABLE */}
-
-      <motion.div
-
-        initial={{
-          opacity: 0,
-          y: 20,
-        }}
-
-        animate={{
-          opacity: 1,
-          y: 0,
-        }}
-
-        className="
-          rounded-3xl
-          border
-          border-white/10
-          bg-white/5
-          backdrop-blur-2xl
-          p-8
-        "
-      >
-
-        <h2 className="
-          text-3xl
-          font-bold
-          text-white
-          mb-8
-        ">
-          User Management
-        </h2>
-
-        <div className="
-          overflow-x-auto
-        ">
-
-          <table className="
-            w-full
-          ">
-
-            <thead>
-
-              <tr className="
-                border-b
-                border-white/10
-              ">
-
-                <th className="
-                  text-left
-                  text-gray-400
-                  pb-4
-                ">
-                  Name
-                </th>
-
-                <th className="
-                  text-left
-                  text-gray-400
-                  pb-4
-                ">
-                  Username
-                </th>
-
-                <th className="
-                  text-left
-                  text-gray-400
-                  pb-4
-                ">
-                  Department
-                </th>
-
-                <th className="
-                  text-left
-                  text-gray-400
-                  pb-4
-                ">
-                  Role
-                </th>
-
-                <th className="
-                  text-left
-                  text-gray-400
-                  pb-4
-                ">
-                  Action
-                </th>
-
-              </tr>
-
-            </thead>
-
-            <tbody>
-
-              {profiles.map(
-                (profile) => (
-
-                  <tr
-
-                    key={profile.id}
-
-                    className="
-                      border-b
-                      border-white/5
-                    "
-                  >
-
-                    <td className="
-                      py-5
-                      text-white
-                    ">
-
-                      {
-                        profile.full_name
-                      }
-
-                    </td>
-
-                    <td className="
-                      py-5
-                      text-gray-400
-                    ">
-
-                      @
-                      {
-                        profile.username
-                      }
-
-                    </td>
-
-                    <td className="
-                      py-5
-                      text-gray-400
-                    ">
-
-                      {
-                        profile.department
-                      }
-
-                    </td>
-
-                    <td className="
-                      py-5
-                    ">
-
-                      <span className={`
-                        px-3
-                        py-1
-                        rounded-full
-                        text-xs
-                        border
-
-                        ${
-                          profile.role ===
-                          "admin"
-
-                            ? `
-                              bg-yellow-500/20
-                              text-yellow-300
-                              border-yellow-500/20
-                            `
-
-                            : `
-                              bg-red-500/20
-                              text-red-300
-                              border-red-500/20
-                            `
-                        }
-                      `}>
-
-                        {
-                          profile.role
-                        }
-
-                      </span>
-
-                    </td>
-
-                    <td className="
-                      py-5
-                    ">
-
-                      <button
-
-                        onClick={() =>
-                          toggleRole(
-                            profile
-                          )
-                        }
-
-                        className="
-                          px-4
-                          py-2
-                          rounded-xl
-                          bg-gradient-to-r
-                          from-yellow-500
-                          to-orange-500
-                          text-white
-                          text-sm
-                          font-medium
-                        "
-                      >
-
-                        Toggle Role
-
-                      </button>
-
-                    </td>
-
-                  </tr>
-                )
-              )}
-
-            </tbody>
-
-          </table>
+          </div>
 
         </div>
 
-      </motion.div>
+      );
+    })}
 
+  </div>
+
+</motion.div>
     </div>
-  )
+  );
 }
 
-export default AdminPage
+// Sub-component for Stats to keep code DRY
+const StatCard = ({ card, index }) => {
+  const Icon = card.icon;
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }}
+      className="rounded-3xl border border-yellow-500/10 bg-white/5 backdrop-blur-2xl p-6 relative overflow-hidden group">
+      <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-500/10 blur-3xl rounded-full group-hover:bg-yellow-500/20 transition-all" />
+      <div className="relative z-10">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center mb-6 shadow-lg shadow-orange-500/20">
+          <Icon size={24} className="text-white" />
+        </div>
+        <p className="text-gray-400 text-xs mb-1 uppercase tracking-wider">{card.title}</p>
+        <h2 className="text-4xl font-black text-white">{card.value}</h2>
+      </div>
+    </motion.div>
+  );
+};
+
+export default AdminPage;

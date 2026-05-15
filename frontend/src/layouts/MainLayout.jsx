@@ -1,73 +1,58 @@
-import Sidebar from "../components/navigation/Sidebar"
-import Navbar from "../components/navigation/Navbar"
+import Sidebar from "../components/navigation/Sidebar";
+import Navbar from "../components/navigation/Navbar";
 
 function MainLayout({ children }) {
   return (
-    <div className="relative flex min-h-screen bg-[#020617] overflow-hidden">
-
-      {/* Strong Red Glow */}
-
-      <div className="
-        absolute
-        top-[-150px]
-        left-[-150px]
-        w-[450px]
-        h-[450px]
-        bg-red-500/20
-        rounded-full
-        blur-[120px]
-      " />
-
-      {/* Purple Glow */}
-
-      <div className="
-        absolute
-        bottom-[-200px]
-        right-[-200px]
-        w-[500px]
-        h-[500px]
-        bg-purple-500/20
-        rounded-full
-        blur-[140px]
-      " />
-
-      {/* Center Ambient Glow */}
-
-      <div className="
-        absolute
-        top-[30%]
-        left-[35%]
-        w-[350px]
-        h-[350px]
-        bg-pink-500/10
-        rounded-full
-        blur-[120px]
-      " />
-
-      {/* Sidebar */}
-
-      <div className="relative z-20">
-        <Sidebar />
+    <div className="relative flex h-screen bg-[#020617] overflow-hidden">
+      
+      {/* Background Ambient Effects */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <AmbientGlow 
+          color="bg-red-500/20" 
+          size="w-[450px] h-[450px]" 
+          position="-top-[150px] -left-[150px]" 
+          blur="blur-[120px]" 
+        />
+        <AmbientGlow 
+          color="bg-purple-500/20" 
+          size="w-[500px] h-[500px]" 
+          position="-bottom-[200px] -right-[200px]" 
+          blur="blur-[140px]" 
+        />
+        <AmbientGlow 
+          color="bg-pink-500/10" 
+          size="w-[350px] h-[350px]" 
+          position="top-[30%] left-[35%]" 
+          blur="blur-[120px]" 
+        />
       </div>
 
-      {/* Main Content */}
+      {/* Sidebar Navigation */}
+      <aside className="relative z-30 shrink-0">
+        <Sidebar />
+      </aside>
 
-      <main className="
-        relative
-        z-10
-        flex-1
-        p-8
-        overflow-auto
-      ">
-
-        <Navbar />
-
-        {children}
-
+      {/* Main Content Area */}
+      <main className="relative z-10 flex-1 flex flex-col h-full overflow-hidden">
+        {/* Scrollable Container */}
+        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+          <Navbar />
+          
+          <div className="max-w-[1600px] mx-auto">
+            {children}
+          </div>
+        </div>
       </main>
-
     </div>
-  )
+  );
 }
 
-export default MainLayout
+/**
+ * Helper component for background ambient glows
+ * to keep the main layout code clean.
+ */
+const AmbientGlow = ({ color, size, position, blur }) => (
+  <div className={`absolute rounded-full ${color} ${size} ${position} ${blur}`} />
+);
+
+export default MainLayout;

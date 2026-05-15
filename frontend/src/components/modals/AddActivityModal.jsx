@@ -1,779 +1,663 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react";
+import { supabase } from "../../lib/supabase";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, CalendarDays, MapPin, Users, FileText } from "lucide-react";
 
-import { supabase } from "../../lib/supabase"
+const initialState = { id: "", title: "", start_date: "", end_date: "", participants: "", location: "", description: "", 
+  priority: "medium", assignment_type: "individual", assigned_to: "", assigned_team_id: "", };
 
-import { motion } from "framer-motion"
+function AddActivityModal({ isOpen, onClose, onCreateActivity, editingActivity }) {
+  const [formData, setFormData] = useState(initialState);
+  const [users, setUsers] = useState([]);
+  const [teams, setTeams] = useState([]);
+  const [showWarriorDropdown, setShowWarriorDropdown] = useState(false);
+  const [showTeamDropdown, setShowTeamDropdown] = useState(false);
+  const warriorDropdownRef = useRef(null);
+  const teamDropdownRef = useRef(null);
 
-import {
-  X,
-  CalendarDays,
-  MapPin,
-  Users,
-  FileText,
-} from "lucide-react"
-
-function AddActivityModal({
-  isOpen,
-  onClose,
-  onCreateActivity,
-  editingActivity,
-}) {
-
-const [formData, setFormData] = useState({
-
-  id: "",
-
-  title: "",
-
-  date: "",
-
-  participants: "",
-
-  location: "",
-
-  description: "",
-
-  priority: "medium",
-
-  deadline: "",
-
-  assigned_to: "",
-})
-
-const [users, setUsers] =
-  useState([])
-
-  // PREFILL FORM WHEN EDITING
-
+  // Sync form with editingActivity or Reset
   useEffect(() => {
-
-    if (editingActivity) {
-
-      setFormData({
-        id: editingActivity.id || "",
-
-        title:
-          editingActivity.title || "",
-
-        date:
-          editingActivity.activity_date || "",
-
-        participants:
-          editingActivity.audience_count || "",
-
-        location:
-          editingActivity.venue || "",
-
-        description:
-          editingActivity.description || "",
-
-        priority:
-          editingActivity.priority || "medium",
-
-        deadline:
-          editingActivity.deadline || "",  
-
-        assigned_to:
-          editingActivity.assigned_to || "",  
-      })
-
-    } else {
-
-      setFormData({
-        id: "",
-
-        title: "",
-
-        date: "",
-
-       participants: "",
-
-        location: "",
-
-        description: "",
-
-        priority: "medium",
-
-        deadline: "",
-
-        assigned_to: "",
-      })
-    }
-
-  }, [editingActivity, isOpen])
-
-  useEffect(() => {
-
-  const fetchUsers =
-    async () => {
-
-const {
-  data: {
-    user
-  }
-} = await supabase.auth.getUser()
-
-if (!user) return
-
-const {
-  data: currentProfile
-} = await supabase
-
-  .from("profiles")
-
-  .select("*")
-
-  .eq("id", user.id)
-
-  .single()
-
-
-const {
-  data
-} = await supabase
-
-  .from("profiles")
-
-  .select("*")
-
-  .eq(
-    "role",
-    "warrior"
-  )
-
-      if (data) {
-
-        setUsers(data)
+    if (isOpen) {
+      if (editingActivity) {
+        setFormData({
+          id: editingActivity.id || "",
+          title: editingActivity.title || "",
+          start_date: editingActivity.start_date || "",
+          end_date: editingActivity.end_date || "",
+          participants: editingActivity.audience_count || "",
+          location: editingActivity.venue || "",
+          description: editingActivity.description || "",
+          priority: editingActivity.priority || "medium",
+          assignment_type: editingActivity.assignment_type || "individual",
+          assigned_to: editingActivity.assigned_to || "",
+          assigned_team_id: editingActivity.assigned_team_id || "",
+        });
+      } else {
+        setFormData(initialState);
       }
     }
+  }, [editingActivity, isOpen]);
 
-  fetchUsers()
+  // Fetch Warriors for assignment
+useEffect(() => {
 
-}, [])
+  const fetchData = async () => {
 
-  if (!isOpen) return null
+    const { data: usersData } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("role", "warrior");
 
-  // HANDLE INPUT
+    if (usersData) {
+      setUsers(usersData);
+    }
+
+    const { data: teamsData } = await supabase
+      .from("teams")
+      .select("*");
+
+    if (teamsData) {
+      setTeams(teamsData);
+    }
+  };
+
+  if (isOpen) {
+    fetchData();
+  }
+
+}, [isOpen]);
+
+useEffect(() => {
+
+  const handleClickOutside = (event) => {
+
+    // WARRIOR
+    if (
+      warriorDropdownRef.current &&
+      !warriorDropdownRef.current.contains(event.target)
+    ) {
+      setShowWarriorDropdown(false);
+    }
+
+    // TEAM
+    if (
+      teamDropdownRef.current &&
+      !teamDropdownRef.current.contains(event.target)
+    ) {
+      setShowTeamDropdown(false);
+    }
+
+  };
+
+  document.addEventListener(
+    "mousedown",
+    handleClickOutside
+  );
+
+  return () => {
+    document.removeEventListener(
+      "mousedown",
+      handleClickOutside
+    );
+  };
+
+}, []);
+
+  if (!isOpen) return null;
 
   const handleChange = (e) => {
-
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
-  }
-
-  // HANDLE SUBMIT
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
 
   const handleSubmit = () => {
-
     if (
-      !formData.title ||
-      !formData.date ||
-      !formData.location
-    ) {
-
-      alert(
-        "Please fill all required fields"
-      )
-
-      return
+  !formData.title ||
+  !formData.start_date ||
+  !formData.end_date ||
+  !formData.location
+) {
+      alert("Please fill all required fields");
+      return;
     }
 
-const activityData = {
-
-  ...formData,
-
-  assigned_user_name:
-
-    users.find(
-      (u) =>
-        u.id ===
-        formData.assigned_to
-    )?.full_name || "",
-
-  category: "Technical",
-
-  status: "planned",
-}
-
-    // SEND DATA TO PARENT
-
-    onCreateActivity(activityData)
-  }
+    const assignedUser = users.find((u) => u.id === formData.assigned_to);
+    
+    onCreateActivity({
+      ...formData,
+      assigned_user_name: assignedUser?.full_name || "",
+      category: "Technical",
+      status: "planned",
+    });
+  };
 
   return (
-
-    <div className="
-      fixed
-      inset-0
-      z-50
-      flex
-      items-center
-      justify-center
-      bg-black/60
-      backdrop-blur-md
-    ">
-
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
       <motion.div
-
-        initial={{
-          opacity: 0,
-          scale: 0.8,
-          y: 50,
-        }}
-
-        animate={{
-          opacity: 1,
-          scale: 1,
-          y: 0,
-        }}
-
-        transition={{
-          duration: 0.3,
-        }}
-
-className="
-  relative
-  w-full
-  max-w-3xl
-  max-h-[90vh]
-  overflow-y-auto
-  overflow-x-hidden
-  custom-scrollbar
-  scrollbar-thin
-  scrollbar-thumb-red-500/20
-  scrollbar-track-transparent
-  rounded-3xl
-  border
-  border-white/10
-  bg-gradient-to-br
-  from-[#111827]
-  to-[#1e293b]
-  p-8
-  shadow-2xl
-"
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/10 bg-gradient-to-br from-[#111827] to-[#1e293b] p-8 shadow-2xl custom-scrollbar"
       >
-
-        {/* Glow */}
-
-        <div className="
-          absolute
-          top-0
-          right-0
-          w-72
-          h-72
-          bg-red-500/10
-          blur-3xl
-          rounded-full
-        " />
+        {/* Aesthetic Red Glow */}
+        <div className="absolute top-0 right-0 w-72 h-72 bg-red-500/10 blur-3xl rounded-full pointer-events-none" />
 
         {/* Header */}
-
-        <div className="
-          relative
-          z-10
-          flex
-          items-center
-          justify-between
-          mb-8
-        ">
-
+        <div className="relative z-10 flex items-center justify-between mb-8">
           <div>
-
-            <h2 className="
-              text-4xl
-              font-black
-              text-white
-              mb-2
-            ">
-
-              {editingActivity
-                ? "Edit Activity"
-                : "Add Activity"}
-
+            <h2 className="text-5xl font-black text-white mb-3 tracking-tight">
+              {editingActivity ? "Edit Activity" : "Add Activity"}
             </h2>
-
-            <p className="text-gray-400">
-
-              {editingActivity
-                ? "Update your activity details."
-                : "Create and manage new campus events."}
-
+            <p className="text-gray-400 text-lg">
+              {editingActivity ? "Update your activity details." : "Create and manage new campus events."}
             </p>
-
           </div>
-
-          <button
-            onClick={onClose}
-            className="
-              w-12
-              h-12
-              rounded-2xl
-              bg-white/5
-              border
-              border-white/10
-              flex
-              items-center
-              justify-center
-              text-gray-400
-              hover:text-white
-              transition
-            "
-          >
-            <X />
+          <button onClick={onClose} className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white transition">
+            <X size={24} />
           </button>
-
         </div>
 
-        {/* Form */}
+        {/* Form Grid */}
 
-        <div className="
-          relative
-          z-10
-          grid
-          grid-cols-2
-          gap-6
-        ">
+        <div className="col-span-2">
+  <h3 className="text-xl font-black text-white mb-1">
+    Basic Information
+  </h3>
 
-          {/* Activity Name */}
+  <p className="text-sm text-gray-500 mb-4">
+    Core activity details and event information.
+  </p>
+</div>
+        <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField label="Activity Name" icon={<FileText className="text-red-400" />} colSpan="col-span-2">
+           <input
+              type="text"
+              name="title"
+              value={formData.title}
+              onChange={handleChange}
+              placeholder="Enter activity name..."
+              data-testid="activity-name-input"
+              className="bg-transparent outline-none text-white w-full"
+            />
+          </FormField>
 
-          <div className="col-span-2">
+          <div className="col-span-2 pt-4 border-t border-white/5">
 
-            <label className="
-              block
-              text-gray-300
-              mb-3
-            ">
-              Activity Name
-            </label>
+  <h3 className="text-xl font-black text-white mb-1">
+    Schedule
+  </h3>
 
-            <div className="
-              flex
-              items-center
-              gap-3
-              bg-black/20
-              border
-              border-white/10
-              rounded-2xl
-              px-5
-              py-4
-            ">
-
-              <FileText className="text-red-400" />
-
-              <input
-                type="text"
-                name="title"
-                value={formData.title}
-                onChange={handleChange}
-                placeholder="Enter activity name..."
-                className="
-                  bg-transparent
-                  outline-none
-                  text-white
-                  w-full
-                "
-              />
-
-            </div>
-
-          </div>
-
-          {/* Date */}
-
-          <div>
-
-            <label className="
-              block
-              text-gray-300
-              mb-3
-            ">
-              Event Date
-            </label>
-
-            <div className="
-              flex
-              items-center
-              gap-3
-              bg-black/20
-              border
-              border-white/10
-              rounded-2xl
-              px-5
-              py-4
-            ">
-
-              <CalendarDays className="text-red-400" />
-
-              <input
-                type="date"
-                name="date"
-                value={formData.date}
-                onChange={handleChange}
-                className="
-                  bg-transparent
-                  outline-none
-                  text-white
-                  w-full
-                "
-              />
-
-            </div>
-
-          </div>
-
-          {/* Participants */}
-
-          <div>
-
-            <label className="
-              block
-              text-gray-300
-              mb-3
-            ">
-              Participants
-            </label>
-
-            <div className="
-              flex
-              items-center
-              gap-3
-              bg-black/20
-              border
-              border-white/10
-              rounded-2xl
-              px-5
-              py-4
-            ">
-
-              <Users className="text-red-400" />
-
-              <input
-                type="number"
-                name="participants"
-                value={formData.participants}
-                onChange={handleChange}
-                placeholder="No. of participants"
-                className="
-                  bg-transparent
-                  outline-none
-                  text-white
-                  w-full
-                "
-              />
-
-            </div>
-
-          </div>
-
-{/* Priority */}
-
-<div>
-
-  <label className="
-    block
-    text-gray-300
-    mb-3
-  ">
-    Priority
-  </label>
-
-  <select
-
-    name="priority"
-
-    value={formData.priority}
-
-    onChange={handleChange}
-
-    className="
-      w-full
-      bg-black/20
-      border
-      border-white/10
-      rounded-2xl
-      px-5
-      py-4
-      text-white
-      outline-none
-    "
-  >
-
-    <option value="low">
-      Low
-    </option>
-
-    <option value="medium">
-      Medium
-    </option>
-
-    <option value="high">
-      High
-    </option>
-
-  </select>
+  <p className="text-sm text-gray-500 mb-4">
+    Define the activity duration.
+  </p>
 
 </div>
 
-{/* Deadline */}
-
-<div>
-
-  <label className="
-    block
-    text-gray-300
-    mb-3
-  ">
-    Deadline
-  </label>
-
-  <input
-
-    type="datetime-local"
-
-    name="deadline"
-
-    value={formData.deadline}
-
-    onChange={handleChange}
-
-    className="
-      w-full
-      bg-black/20
-      border
-      border-white/10
-      rounded-2xl
-      px-5
-      py-4
-      text-white
-      outline-none
-    "
-  />
-
-</div>
-
-{/* Assign Warrior */}
-
-<div className="col-span-2">
-
-  <label className="
-    block
-    text-gray-300
-    mb-3
-  ">
-    Assign Warrior
-  </label>
-
-  <select
-
-    name="assigned_to"
-
-    value={formData.assigned_to}
-
-    onChange={handleChange}
-
-    className="
-      w-full
-      bg-black/20
-      border
-      border-white/10
-      rounded-2xl
-      px-5
-      py-4
-      text-white
-      appearance-none
-      outline-none
-    "
-  >
-
-    <option
-  value=""
-  className="
-    bg-[#111827]
-    text-white
-  "
+<FormField
+  label="Start Date"
+  icon={<CalendarDays className="text-red-400" />}
 >
-      Select Warrior
-    </option>
+  <input
+    type="date"
+    name="start_date"
+    value={formData.start_date}
+    onChange={handleChange}
+    className="bg-transparent outline-none text-white w-full"
+  />
+</FormField>
 
-{
-  users
+<FormField
+  label="End Date"
+  icon={<CalendarDays className="text-red-400" />}
+>
+  <input
+    type="date"
+    name="end_date"
+    value={formData.end_date}
+    onChange={handleChange}
+    className="bg-transparent outline-none text-white w-full"
+  />
+</FormField>
 
-    .filter((user) =>
-      user.role === "warrior"
-    )
+<div className="col-span-2 pt-4 border-t border-white/5">
 
-    .map((user) => (
+  <h3 className="text-xl font-black text-white mb-1">
+    Activity Settings
+  </h3>
 
-        <option
-          key={user.id}
-          value={user.id}
+  <p className="text-sm text-gray-500 mb-4">
+    Configure participation and priority settings.
+  </p>
 
+</div>
+
+          <FormField label="Participants" icon={<Users className="text-red-400" />}>
+           <input
+            type="number"
+            name="participants"
+            value={formData.participants}
+            onChange={handleChange}
+            placeholder="No. of participants"
+            data-testid="participants-input"
+            className="bg-transparent outline-none text-white w-full"
+          />
+          </FormField>
+
+          <div className="space-y-3">
+            <label className="text-gray-300 block">Priority</label>
+            <select name="priority" value={formData.priority} onChange={handleChange} 
+            className="
+              w-full
+              bg-[#0B1220]
+              border
+              border-white/10
+              rounded-2xl
+              px-5
+              py-4
+              text-white
+              outline-none
+              focus:border-pink-500/50
+              focus:ring-2
+              focus:ring-pink-500/10
+              transition-all
+              appearance-none
+              cursor-pointer
+              font-medium
+              ">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+
+          <div className="col-span-2 pt-4 border-t border-white/5">
+
+  <h3 className="text-xl font-black text-white mb-1">
+    Assignment
+  </h3>
+
+  <p className="text-sm text-gray-500 mb-4">
+    Choose whether this task is for an individual or an entire team.
+  </p>
+
+</div>
+
+<div className="col-span-2 space-y-5">
+
+  <label className="text-gray-300 block">
+    Assignment Type
+  </label>
+
+  {/* TOGGLE */}
+  <div className="flex gap-4">
+
+    <button
+      type="button"
+      onClick={() =>
+        setFormData({
+          ...formData,
+          assignment_type: "individual"
+        })
+      }
+      className={`px-5 py-3 rounded-2xl font-bold transition-all ${
+        formData.assignment_type === "individual"
+          ? "bg-red-500 text-white"
+          : "bg-black/20 text-gray-400"
+      }`}
+    >
+      Individual
+    </button>
+
+    <button
+      type="button"
+      onClick={() =>
+        setFormData({
+          ...formData,
+          assignment_type: "team"
+        })
+      }
+      className={`px-5 py-3 rounded-2xl font-bold transition-all ${
+        formData.assignment_type === "team"
+          ? "bg-red-500 text-white"
+          : "bg-black/20 text-gray-400"
+      }`}
+    >
+      Team
+    </button>
+
+  </div>
+
+  {/* INDIVIDUAL */}
+  {formData.assignment_type === "individual" && (
+
+    <div className="space-y-3">
+
+      <label className="text-gray-300 block">
+        Assign Warrior
+      </label>
+
+<div
+  className="relative"
+  ref={warriorDropdownRef}
+>
+
+  {/* SELECT BUTTON */}
+<button
+      type="button"
+      data-testid="assign-warrior-select"
+    onClick={() => {
+
+  setShowTeamDropdown(false);
+
+  setShowWarriorDropdown(
+    !showWarriorDropdown
+  );
+
+}}
+    className="
+      w-full
+      bg-[#0B1220]
+      border
+      border-white/10
+      rounded-2xl
+      px-5
+      py-4
+      text-white
+      flex
+      items-center
+      justify-between
+      hover:border-pink-500/30
+      transition-all
+    "
+  >
+
+    <span>
+      {
+        users.find(
+          (u) => u.id === formData.assigned_to
+        )?.full_name || "Select Warrior"
+      }
+    </span>
+
+    <span className="text-gray-500">
+      ▼
+    </span>
+
+  </button>
+
+  {/* DROPDOWN */}
+  {showWarriorDropdown && (
+
+    <div
+      className="
+        absolute
+        z-50
+        mt-3
+        w-full
+        rounded-2xl
+        border
+        border-white/10
+        bg-[#0B1220]
+        backdrop-blur-xl
+        shadow-2xl
+        overflow-hidden
+      "
+    >
+
+      {users.map((u) => (
+
+        <button
+          key={u.id}
+          type="button"
+          onClick={() => {
+
+            setFormData({
+              ...formData,
+              assigned_to: u.id
+            });
+
+            setShowWarriorDropdown(false);
+          }}
           className="
-          bg-[#111827]
-          text-white"
+            w-full
+            px-5
+            py-4
+            text-left
+            hover:bg-pink-500/10
+            transition-all
+            border-b
+            border-white/5
+            last:border-none
+          "
         >
 
-          {user.full_name}
-          {" "}
-          (
-          {user.role}
-          )
+          <div className="flex items-center justify-between">
 
-        </option>
-      ))
-    }
+            <div>
 
-  </select>
+              <p className="text-white font-medium">
+                {u.full_name}
+              </p>
 
-</div>
+              <p className="text-xs text-gray-500">
+                Warrior
+              </p>
 
-          {/* Location */}
+            </div>
 
-          <div className="col-span-2">
-
-            <label className="
-              block
-              text-gray-300
-              mb-3
-            ">
-              Location
-            </label>
-
-            <div className="
-              flex
-              items-center
-              gap-3
-              bg-black/20
-              border
-              border-white/10
-              rounded-2xl
-              px-5
-              py-4
-            ">
-
-              <MapPin className="text-red-400" />
-
-              <input
-                type="text"
-                name="location"
-                value={formData.location}
-                onChange={handleChange}
-                placeholder="Enter event location..."
-                className="
-                  bg-transparent
-                  outline-none
-                  text-white
-                  w-full
-                "
-              />
-
+            <div className="text-pink-400">
+              ⚔
             </div>
 
           </div>
 
-          {/* Description */}
+        </button>
 
-          <div className="col-span-2">
+      ))}
 
-            <label className="
-              block
-              text-gray-300
-              mb-3
-            ">
-              Description
-            </label>
+    </div>
 
-            <textarea
-              rows="5"
+  )}
+
+</div>
+      </div>
+
+
+  )}
+
+  {/* TEAM */}
+  {formData.assignment_type === "team" && (
+
+    <div className="space-y-3">
+
+      <label className="text-gray-300 block">
+        Assign Team
+      </label>
+
+<div
+  className="relative"
+  ref={teamDropdownRef}
+>
+
+  {/* SELECT BUTTON */}
+  <button
+    type="button"
+onClick={() => {
+
+  setShowWarriorDropdown(false);
+
+  setShowTeamDropdown(
+    !showTeamDropdown
+  );
+
+}}
+    className="
+      w-full
+      bg-[#0B1220]
+      border
+      border-white/10
+      rounded-2xl
+      px-5
+      py-4
+      text-white
+      flex
+      items-center
+      justify-between
+      hover:border-pink-500/30
+      transition-all
+    "
+  >
+
+    <span>
+      {
+        teams.find(
+          (team) =>
+            team.id === formData.assigned_team_id
+        )?.team_name || "Select Team"
+      }
+    </span>
+
+    <span className="text-gray-500">
+      ▼
+    </span>
+
+  </button>
+
+  {/* DROPDOWN */}
+  {showTeamDropdown && (
+
+    <div
+      className="
+        absolute
+        z-50
+        mt-3
+        w-full
+        rounded-2xl
+        border
+        border-white/10
+        bg-[#0B1220]
+        backdrop-blur-xl
+        shadow-2xl
+        overflow-hidden
+      "
+    >
+
+      {teams.map((team) => (
+
+        <button
+          key={team.id}
+          type="button"
+          onClick={() => {
+
+            setFormData({
+              ...formData,
+              assigned_team_id: team.id
+            });
+
+            setShowTeamDropdown(false);
+          }}
+          className="
+            w-full
+            px-5
+            py-4
+            text-left
+            hover:bg-pink-500/10
+            transition-all
+            border-b
+            border-white/5
+            last:border-none
+          "
+        >
+
+          <div className="flex items-center justify-between">
+
+            <div>
+
+              <p className="text-white font-medium">
+                {team.team_name}
+              </p>
+
+              <p className="text-xs text-gray-500">
+                Team
+              </p>
+
+            </div>
+
+            <div className="text-pink-400">
+              👥
+            </div>
+
+          </div>
+
+        </button>
+
+      ))}
+
+    </div>
+
+  )}
+
+</div>
+
+    </div>
+
+  )}
+
+</div>
+          <FormField label="Location" icon={<MapPin className="text-red-400" />} colSpan="col-span-2">
+          <input
+            type="text"
+            name="location"
+            value={formData.location}
+            onChange={handleChange}
+            placeholder="Enter event location..."
+            data-testid="location-input"
+            className="bg-transparent outline-none text-white w-full"
+          />
+          </FormField>
+
+          <div className="col-span-2 space-y-3">
+            <label className="text-gray-300 block">Description</label>
+           <textarea
+              rows="4"
               name="description"
               value={formData.description}
               onChange={handleChange}
               placeholder="Describe the activity..."
-              className="
-                w-full
-                bg-black/20
-                border
-                border-white/10
-                rounded-2xl
-                px-5
-                py-4
-                text-white
-                outline-none
-                resize-none
-              "
+              data-testid="description-input"
+              className="w-full bg-black/20 border border-white/10 rounded-2xl px-5 py-4 text-white outline-none resize-none"
             />
-
           </div>
-
         </div>
 
-        {/* Footer */}
-
-        <div className="
-          relative
-          z-10
-          flex
-          justify-end
-          gap-4
-          mt-10
-        ">
-
-          <button
-            onClick={onClose}
-            className="
-              px-6
-              py-4
-              rounded-2xl
-              border
-              border-white/10
-              text-gray-300
-              hover:bg-white/5
-              transition
-            "
-          >
+        {/* Actions */}
+        <div className="relative z-10 flex justify-end gap-4 mt-10">
+          <button onClick={onClose} className="px-6 py-4 rounded-2xl border border-white/10 text-gray-300 hover:bg-white/5 transition">
             Cancel
           </button>
-
           <motion.button
-
-            whileHover={{
-              scale: 1.05,
-            }}
-
-            whileTap={{
-              scale: 0.95,
-            }}
-
+            data-testid="create-activity-btn"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={handleSubmit}
-
-            className="
-              px-8
-              py-4
-              rounded-2xl
-              bg-gradient-to-r
-              from-red-500
-              to-pink-500
-              text-white
-              font-semibold
-              shadow-lg
-              shadow-red-500/20
-            "
+            className="px-8 py-4 rounded-2xl bg-gradient-to-r from-red-500 to-pink-500 text-white font-bold shadow-lg shadow-red-500/20"
           >
-
-            {editingActivity
-              ? "Update Activity"
-              : "Create Activity"}
-
+            {editingActivity ? "Update Activity" : "Create Activity"}
           </motion.button>
-
         </div>
-
       </motion.div>
-
     </div>
-  )
+  );
 }
 
-export default AddActivityModal
+// Sub-component for form fields to reduce repetition
+const FormField = ({ label, icon, children, colSpan = "" }) => (
+  <div className={`${colSpan} space-y-3`}>
+    <label className="block text-gray-300">{label}</label>
+    <div className="flex items-center gap-3 bg-black/20 border border-white/10 rounded-2xl px-5 py-4 transition-focus focus-within:border-red-500/50">
+      {icon}
+      {children}
+    </div>
+  </div>
+);
+
+export default AddActivityModal;

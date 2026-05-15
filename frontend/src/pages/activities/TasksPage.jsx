@@ -1,1855 +1,891 @@
-import { useEffect, useState } from "react"
-
-import toast from "react-hot-toast"
-
-import {
-  motion,
-  AnimatePresence,
-} from "framer-motion"
-
-import {
-  CalendarDays,
-  MapPin,
-  Users,
-  Search,
-  Filter,
-  Trash2,
-  Pencil,
-} from "lucide-react"
-
-import AddActivityModal from "../../components/modals/AddActivityModal"
-
-import { supabase } from "../../lib/supabase"
+import { useEffect, useState, useCallback } from "react";
+import toast from "react-hot-toast";
+import { motion, AnimatePresence } from "framer-motion";
+import { CalendarDays, MapPin, Users, Search, Filter, Trash2, Pencil } from "lucide-react";
+import AddActivityModal from "../../components/modals/AddActivityModal";
+import { supabase } from "../../lib/supabase";
 
 function TasksPage() {
+  const [submissions, setSubmissions] = useState({});
+  const [profile, setProfile] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingActivity, setEditingActivity] = useState(null);
+  const [activities, setActivities] = useState([]);
+  const [taskFilter, setTaskFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [teams, setTeams] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [assignmentType, setAssignmentType] = useState("individual");
+  const [teamName, setTeamName] = useState("");
+  const [selectedTeam, setSelectedTeam] = useState("");
+  const [selectedWarrior, setSelectedWarrior] = useState("");
 
-  const [user, setUser] =
-  useState(null)
+  // FETCH ACTIVITIES & PROFILE
+  const fetchActivities = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-  const [profile, setProfile] =
-  useState(null)
+    // Get Profile for role-based filtering
+    const { data: profileData } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+    setProfile(profileData);
+    if (profileData?.role !== "warrior") {
+  const { data: teamsData } = await supabase
+    .from("teams")
+    .select("*")
+    .eq("college_id", profileData.college_id);
 
-  const [isModalOpen, setIsModalOpen] =
-    useState(false)
-
-  const [editingActivity, setEditingActivity] =
-    useState(null)
-
-  const [activities, setActivities] =
-    useState([])
-
-  const [loading, setLoading] =
-    useState(true)
-
-  const [searchTerm, setSearchTerm] =
-    useState("")
-
-  const [statusFilter, setStatusFilter] =
-    useState("All")
-
-  const [isFilterOpen, setIsFilterOpen] =
-    useState(false)
-
-  // FETCH ACTIVITIES
-
-  const fetchActivities = async () => {
-
-      const {
-  data: { user },
-} = await supabase.auth.getUser()
-
-if (!user) {
-
-  const {
-  data: profile,
-} = await supabase
-
-  .from("profiles")
-
-  .select("*")
-
-  .eq("id", user.id)
-
-  .single()
-
-  setProfile(profile)
-
-  setActivities([])
-
-  setLoading(false)
-
-  return
+  setTeams(teamsData || []);
 }
 
-// FETCH PROFILE
-
-const {
-  data: profile,
-} = await supabase
-
-  .from("profiles")
-
-  .select("*")
-
-  .eq("id", user.id)
-
-  .single()
-
-let query = supabase
-
+    let query = supabase
   .from("tasks")
+  .select(`
+    *,
+    teams:assigned_team_id(team_name)
+  `);
 
-  .select("*")
+    if (profileData?.role === "president") {
+      query = query.eq("assigned_college_id", profileData.college_id);
+    } else if (profileData?.role === "warrior") {
 
-// ADMIN → ALL ACTIVITIES
+  // GET TEAM IDS
+  const { data: memberTeams } = await supabase
+    .from("team_members")
+    .select("team_id")
+    .eq("user_id", profileData.id);
 
-// ADMIN → ALL TASKS
+  const teamIds =
+    memberTeams?.map(t => t.team_id) || [];
 
-if (
-  profile?.role ===
-  "admin"
-) {
-
-  // no filtering
+  // FETCH:
+  // 1. INDIVIDUAL TASKS
+  // 2. TEAM TASKS
+  query = query.or(
+    `assigned_to.eq.${user.id},assigned_team_id.in.(${teamIds.join(",")})`
+  );
 }
 
-// PRESIDENT → COLLEGE TASKS
-
-else if (
-  profile?.role ===
-  "president"
-) {
-
-  query = query.eq(
-    "college_id",
-    profile.college_id
-  )
-}
-
-// WARRIOR → OWN TASKS
-
-else if (
-  profile?.role ===
-  "warrior"
-) {
-
-  query = query.eq(
-    "assigned_to",
-    user.id
-  )
-}
-
-const {
-  data,
-  error,
-} = await query.order(
-  "created_at",
-  {
-    ascending: false,
-  }
-)
-
-console.log(
-  "LOGGED USER:",
-  user.id
-)
-
-console.log(
-  "FETCHED TASKS:",
-  data
-)
-
-    if (error) {
-
-      console.log(
-        "FETCH ERROR:",
-        error
-      )
-
-    } else {
-
-      setActivities(data)
-    }
-
-    setLoading(false)
-  }
-
-  // REALTIME
+    const { data, error } = await query.order("created_at", { ascending: false });
+    if (!error) setActivities(data || []);
+    setLoading(false);
+  }, []);
+  const fetchTasks = fetchActivities; // This redirects the "wrong" name to the "right" function
 
   useEffect(() => {
 
-    const getUser =
-  async () => {
+    const fetchTeams = async () => {
 
-    const {
-      data
-    } =
-      await supabase.auth.getUser()
+  const { data, error } = await supabase
+    .from("teams")
+    .select("*");
 
-    setUser(
-      data?.user
-    )
+  if (error) {
+    console.error(error);
+  } else {
+    setTeams(data || []);
   }
+};
+    fetchActivities();
+    fetchTeams();
+    const channel = supabase.channel("activities-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, fetchActivities)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [fetchActivities]);
 
-getUser()
+const handleSubmitTask = async (taskId) => {
+  console.log("TASK ID RECEIVED:", taskId);
+  try {
 
-    fetchActivities()
+const currentSubmission = submissions[taskId];
 
-    const channel = supabase
-      .channel("activities-realtime")
-
-      .on(
-        "postgres_changes",
-
-        {
-          event: "*",
-          schema: "public",
-          table: "tasks",
-        },
-
-        () => {
-
-          console.log(
-            "Activities realtime update"
-          )
-
-          fetchActivities()
-        }
-      )
-
-      .subscribe()
-
-    return () => {
-
-      supabase.removeChannel(
-        channel
-      )
-    }
-
-  }, [])
-
-  // CREATE
-
-  const handleCreateActivity = async (
-    newActivity
-  ) => {
-
-    const {
-  data: { user },
-} = await supabase.auth.getUser()
-
-if (!user) {
-
-  toast.error(
-    "User not authenticated"
-  )
-
-  return
+if (!currentSubmission?.proofFile) {
+  toast.error("Please upload proof document");
+  return;
 }
 
-const {
-  data: profile,
-} = await supabase
+    const file = currentSubmission?.proofFile;
 
-  .from("profiles")
+    const fileExt = file.name.split('.').pop();
 
-  .select("*")
+    const fileName = `${taskId}-${Date.now()}.${fileExt}`;
 
-  .eq("id", user.id)
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from("activity-proofs")
+      .upload(fileName, file);
 
-  .single()
+    if (uploadError) throw uploadError;
 
-const { error } =
-  await supabase
-    .from("tasks")
-        .insert([
-          {
-            title:
-              newActivity.title,
+    // Get Public URL
+    const { data } = supabase.storage
+      .from("activity-proofs")
+      .getPublicUrl(fileName);
 
-            activity_type:
-              "Technical",
+    const proofUrl = data.publicUrl;
 
-            activity_date:
-              newActivity.date,
-
-            venue:
-              newActivity.location,
-
-            audience_count:
-              Number(
-                newActivity.participants
-              ) || 0,
-
-            description:
-              newActivity.description || "",
-
-            priority:
-              newActivity.priority || "medium",
-
-            deadline:
-              newActivity.deadline || null,
-
-                status:
-                  "planned",
-
-                created_by:
-                  user.id,
-
-                assigned_to:
-                  newActivity.assigned_to || user.id,
-
-                assigned_user_name:
-                  newActivity.assigned_user_name || "",  
-
-                assigned_college_id:
-                  profile?.college_id || null,
-
-                assigned_team_id:
-                  profile?.team_id || null,
-
-                user_id:
-                user.id,  
-          },
-        ])
-
-    if (error) {
-
-      console.log(
-        "SUPABASE ERROR:",
-        error
-      )
-
-      toast.error(
-        "Failed to create activity"
-      )
-
-    } else {
-
-      fetchActivities()
-
-      toast.success(
-        "Activity created successfully"
-      )
-
-      setEditingActivity(null)
-
-      setIsModalOpen(false)
-    }
-  }
-
-  // UPDATE
-
-  const handleUpdateActivity = async (
-    updatedActivity
-  ) => {
-
-    const { error } =
-      await supabase
-        .from("tasks")
-        .update({
-          title:
-            updatedActivity.title,
-
-          activity_type:
-            "Technical",
-
-          activity_date:
-            updatedActivity.date,
-
-          venue:
-            updatedActivity.location,
-
-          audience_count:
-            Number(
-              updatedActivity.participants
-            ) || 0,
-
-          description:
-            updatedActivity.description || "",
-
-          status:
-            updatedActivity.status ||
-            "planned",
-        })
-
-        .eq(
-          "id",
-          updatedActivity.id
-        )
-
-    if (error) {
-
-      console.log(
-        "UPDATE ERROR:",
-        error
-      )
-
-      toast.error(
-        "Failed to update activity"
-      )
-
-    } else {
-
-      fetchActivities()
-
-      toast.success(
-        "Activity updated successfully"
-      )
-
-      setEditingActivity(null)
-
-      setIsModalOpen(false)
-    }
-  }
-
-  // DELETE
-
-  const handleDeleteActivity = async (
-    id
-  ) => {
-
-
-    const confirmDelete =
-      window.confirm(
-        "Are you sure you want to delete this activity?"
-      )
-
-    if (!confirmDelete) return
-
-    const {
-  data,
-  error
-} =
-await supabase
+const { data: updatedTask, error } = await supabase
   .from("tasks")
-  .delete()
-  .eq("id", id)
+  .update({
+    status: "submitted",
+    remarks: currentSubmission?.remarks,
+    proof_url: proofUrl,
+    completion_date: new Date().toISOString()
+  })
+  .eq("id", taskId)
+  .select();
 
-    if (error) {
+console.log("UPDATED TASK:", updatedTask);
+console.log("UPDATE ERROR:", error);
 
-      console.log(
-        "DELETE ERROR:",
-        error
-      )
+    if (error) throw error;
 
-      toast.error(
-        "Failed to delete activity"
-      )
-
-      return
-
-    } 
-
-      fetchActivities()
-
-      toast.success(
-        "Activity deleted successfully"
-      )
+    toast.success("Proof submitted for approval!");
     
+
+    const { data: presidentTasks } = await supabase
+  .from("tasks")
+  .select("created_by")
+  .eq("id", taskId)
+  .single();
+
+if (presidentTasks?.created_by) {
+
+const { data: presidentProfile } = await supabase
+  .from("profiles")
+  .select("id")
+  .eq("id", presidentTasks.created_by)
+  .single();
+
+if (presidentProfile?.user_id) {
+
+  await supabase.from("notifications").insert([
+    {
+      user_id: presidentProfile.user_id,
+      message: `New task submission received`,
+      type: "task_submission"
+    }
+  ]);
+
+}
+
+}
+
+setSubmissions(prev => ({
+  ...prev,
+  [taskId]: {
+    remarks: "",
+    proofFile: null
+  }
+}));
+
+    fetchActivities();
+
+  } catch (err) {
+    toast.error("Submission failed: " + err.message);
+  }
+};
+
+  const createTeam = async () => {
+
+  if (!teamName.trim()) {
+    toast.error("Enter team name");
+    return;
   }
 
-// TOGGLE STATUS
-
-const handleStatusToggle = async (
-  activity
-) => {
-
-  const newStatus =
-
-    activity.status ===
-    "planned"
-
-      ? "completed"
-
-      : "planned"
-
-  const { error } =
-    await supabase
-      .from("tasks")
-      .update({
-        status: newStatus,
-      })
-
-      .eq(
-        "id",
-        activity.id
-      )
+  const { error } = await supabase
+    .from("teams")
+    .insert([
+      {
+        name: teamName,
+        college_id: profile?.college_id
+      }
+    ]);
 
   if (error) {
 
-    console.log(
-      "STATUS UPDATE ERROR:",
-      error
-    )
-
-    toast.error(
-      "Failed to update status"
-    )
+    toast.error(error.message);
 
   } else {
 
-    // INSTANT UI UPDATE
+    toast.success("Team created!");
 
-    setActivities((prev) =>
+    setTeamName("");
 
-      prev.map((item) =>
+    fetchActivities();
 
-        item.id === activity.id
-
-          ? {
-              ...item,
-              status: newStatus,
-            }
-
-          : item
-      )
-    )
-
-    toast.success(
-      `Activity marked as ${newStatus}`
-    )
   }
-}
+};
 
-// UPDATE PROGRESS
+const addWarriorToTeam = async () => {
 
-const handleProgressUpdate = async (
-  activity,
-  amount
-) => {
+  if (!selectedTeam || !selectedWarrior) {
+    toast.error("Select both team and warrior");
+    return;
+  }
 
-  const newProgress =
-
-    Math.min(
-      100,
-
-      Math.max(
-        0,
-
-        (activity.progress || 0)
-        + amount
-      )
-    )
-
-  const newStatus =
-
-    newProgress === 100
-
-      ? "completed"
-
-      : "planned"
-
-  const { error } =
-    await supabase
-
-      .from("tasks")
-
-      .update({
-
-        progress:
-          newProgress,
-
-        status:
-          newStatus,
-      })
-
-      .eq(
-        "id",
-        activity.id
-      )
+  const { error } = await supabase
+    .from("team_members")
+    .insert([
+      {
+        team_id: selectedTeam,
+        user_id: selectedWarrior
+      }
+    ]);
 
   if (error) {
 
-    toast.error(
-      "Failed to update progress"
-    )
+    toast.error(error.message);
 
   } else {
 
-    setActivities((prev) =>
+    toast.success("Warrior added to team!");
 
-      prev.map((item) =>
-
-        item.id === activity.id
-
-          ? {
-
-              ...item,
-
-              progress:
-                newProgress,
-
-              status:
-                newStatus,
-            }
-
-          : item
-      )
-    )
-
-    toast.success(
-      `Progress updated to ${newProgress}%`
-    )
   }
+};
+
+  // CREATE / UPDATE
+  const handleSaveActivity = async (activityData) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return toast.error("Not authenticated");
+
+    const payload = {
+      title: activityData.title,
+      activity_type: "Technical",
+      activity_date: activityData.start_date,
+      venue: activityData.location,
+      audience_count: Number(activityData.participants) || 0,
+      description: activityData.description || "",
+      priority: activityData.priority || "medium",
+      deadline: activityData.deadline || null,
+assigned_to:
+  activityData.assignment_type === "individual"
+    ? activityData.assigned_to || user.id
+    : null,
+
+assigned_team_id:
+  activityData.assignment_type === "team"
+    ? activityData.assigned_team_id
+    : null,
+
+assignment_type:
+  activityData.assignment_type,
+      assigned_user_name: activityData.assigned_user_name || "",
+      assigned_college_id: profile?.college_id || null,
+    };
+
+    const action = editingActivity 
+      ? supabase.from("tasks").update(payload).eq("id", editingActivity.id)
+      : supabase.from("tasks").insert([{ ...payload, status: "planned", created_by: user.id, user_id: user.id }]);
+
+    const { error } = await action;
+    if (error) toast.error("Action failed");
+    else {
+      toast.success(editingActivity ? "Updated!" : "Created!");
+if (!editingActivity) {
+
+  // INDIVIDUAL TASK
+  if (payload.assignment_type === "individual") {
+
+    await supabase
+      .from("notifications")
+      .insert([
+        {
+          user_id: payload.assigned_to,
+          title: "New Task Assigned",
+          message: `New task assigned: ${payload.title}`,
+          notification_type: "task_assigned"
+        }
+      ]);
+
+  }
+
+  // TEAM TASK
+  if (payload.assignment_type === "team") {
+
+    // GET TEAM MEMBERS
+    const { data: members } = await supabase
+      .from("team_members")
+      .select("user_id")
+      .eq("team_id", payload.assigned_team_id);
+
+    if (members?.length > 0) {
+
+      const notificationPayload = members.map(member => ({
+        user_id: member.user_id,
+        title: "New Team Task",
+        message: `Team task assigned: ${payload.title}`,
+        notification_type: "task_assigned"
+      }));
+
+      await supabase
+        .from("notifications")
+        .insert(notificationPayload);
+
+    }
+
+  }
+
 }
+      setIsModalOpen(false);
+      setEditingActivity(null);
+      fetchActivities();
+    }
+  };
 
-  // FILTER
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this activity?")) return;
+    const { error } = await supabase.from("tasks").delete().eq("id", id);
+    if (!error) {
 
-  const filteredActivities =
-    activities.filter((activity) => {
+  setActivities(prev =>
+    prev.filter(activity => activity.id !== id)
+  );
 
-      const search =
-        searchTerm.toLowerCase()
+  toast.success("Deleted");
+}
+  };
 
-      const matchesSearch =
+  const updateTaskField = async (activity, updates) => {
+    // Optimistic Update
+    setActivities(prev => prev.map(a => a.id === activity.id ? { ...a, ...updates } : a));
+    const { error } = await supabase.from("tasks").update(updates).eq("id", activity.id);
+    if (error) {
+      toast.error("Sync failed");
+      fetchActivities(); // Rollback
+    }
+  };
 
-        activity.title
-          ?.toLowerCase()
-          .includes(search)
-
-        ||
-
-        activity.venue
-          ?.toLowerCase()
-          .includes(search)
-
-        ||
-
-        activity.description
-          ?.toLowerCase()
-          .includes(search)
-
-      const matchesStatus =
-
-        statusFilter === "All"
-
-        ||
-
-        activity.status ===
-        statusFilter.toLowerCase()
-
-      return (
-        matchesSearch &&
-        matchesStatus
-      )
-    })
+  const filtered = activities.filter(a => {
+    const matchesSearch = a.title?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "All" || a.status === statusFilter.toLowerCase();
+    return matchesSearch && matchesStatus;
+  });
 
   return (
-
-    <div className="
-      space-y-8
-      relative
-    ">
-
-      {/* Glow */}
-
-      <div className="
-        fixed
-        top-0
-        left-1/3
-        w-[500px]
-        h-[500px]
-        bg-red-500/10
-        blur-[180px]
-        rounded-full
-        pointer-events-none
-      " />
-
-      <div className="
-        fixed
-        bottom-0
-        right-0
-        w-[400px]
-        h-[400px]
-        bg-pink-500/10
-        blur-[160px]
-        rounded-full
-        pointer-events-none
-      " />
-
-      {/* Header */}
-
-      <div className="
-        flex
-        items-center
-        justify-between
-      ">
-
+    <div className="space-y-8 relative pb-20">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-
-          <motion.h1
-
-            initial={{
-              opacity: 0,
-              y: -20,
-            }}
-
-            animate={{
-              opacity: 1,
-              y: 0,
-            }}
-
-            className="
-              text-5xl
-              font-black
-              text-white
-              mb-3
-            "
-          >
-            Activities
-          </motion.h1>
-
-          <p className="
-            text-gray-400
-            text-lg
-          ">
-            Manage and monitor all campus activities.
-          </p>
-
+          <h1 className="text-5xl font-black text-white mb-2">Activities</h1>
+          <p className="text-gray-400 text-lg">Manage campus events and tech trails.</p>
         </div>
-
-        <motion.button
-
-          whileHover={{
-            scale: 1.05,
-            boxShadow:
-              "0px 0px 40px rgba(255,80,80,0.35)",
-          }}
-
-          whileTap={{
-            scale: 0.95,
-          }}
-
-          onClick={() => {
-
-            setEditingActivity(null)
-
-            setIsModalOpen(true)
-          }}
-
-          className="
-            relative
-            overflow-hidden
-            px-6
-            py-4
-            rounded-2xl
-            bg-gradient-to-r
-            from-red-500
-            to-pink-500
-            text-white
-            font-semibold
-            shadow-lg
-            shadow-red-500/30
-          "
-        >
-
-          <div className="
-            absolute
-            inset-0
-            bg-white/10
-            opacity-0
-            hover:opacity-100
-            transition
-          " />
-
-          + Add Activity
-
-        </motion.button>
-
       </div>
 
-      {/* Search + Filter */}
-
-      <div className="
-        relative
-        z-50
-        grid
-        grid-cols-2
-        gap-6
-      ">
-
-        {/* Search */}
-
-        <div className="
-          flex
-          items-center
-          gap-3
-          bg-white/5
-          border
-          border-white/10
-          rounded-2xl
-          px-5
-          py-4
-          backdrop-blur-xl
-          shadow-lg
-          shadow-black/20
-        ">
-
-          <Search className="
-            text-gray-400
-          " />
-
-          <input
-            type="text"
-
-            value={searchTerm}
-
-            onChange={(e) =>
-              setSearchTerm(
-                e.target.value
-              )
-            }
-
-            placeholder="Search activities..."
-
-            className="
-              bg-transparent
-              outline-none
-              text-white
-              w-full
-            "
-          />
-
+      {/* SEARCH & FILTERS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-50">
+        <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl px-5 py-4 backdrop-blur-xl">
+          <Search className="text-gray-400" size={20} />
+          <input type="text" placeholder="Search tasks..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="bg-transparent outline-none text-white w-full" />
         </div>
 
-        {/* Filter */}
-
-        <div className="
-          relative
-          bg-white/5
-          border
-          border-white/10
-          rounded-2xl
-          px-5
-          py-4
-          backdrop-blur-xl
-          shadow-lg
-          shadow-black/20
-        ">
-
-          <button
-
-            onClick={() =>
-              setIsFilterOpen(
-                !isFilterOpen
-              )
-            }
-
-            className="
-              w-full
-              flex
-              items-center
-              justify-between
-              text-white
-            "
-          >
-
-            <div className="
-              flex
-              items-center
-              gap-3
-            ">
-
-              <Filter className="
-                text-red-400
-              " />
-
-              <span className="
-                text-gray-300
-              ">
-                Filter Status
-              </span>
-
-            </div>
-
-            <div className="
-              flex
-              items-center
-              gap-3
-            ">
-
-              <span className="
-                px-3
-                py-1
-                rounded-full
-                text-sm
-                bg-red-500/10
-                border
-                border-red-500/20
-                text-red-300
-              ">
-                {statusFilter}
-              </span>
-
-              <motion.div
-
-                animate={{
-                  rotate:
-                    isFilterOpen
-                      ? 180
-                      : 0
-                }}
-
-                transition={{
-                  duration: 0.25
-                }}
-
-                className="
-                  text-gray-400
-                "
-              >
-                ▼
-              </motion.div>
-
-            </div>
-
-          </button>
-
+        <div className="relative bg-white/5 border border-white/10 rounded-2xl px-5 py-4 backdrop-blur-xl cursor-pointer" onClick={() => setIsFilterOpen(!isFilterOpen)}>
+          <div className="flex items-center justify-between text-white">
+            <div className="flex items-center gap-3"><Filter size={20} className="text-red-400" /> <span>Filter: {statusFilter}</span></div>
+            <motion.div animate={{ rotate: isFilterOpen ? 180 : 0 }}>▼</motion.div>
+          </div>
           <AnimatePresence>
-
             {isFilterOpen && (
-
-              <motion.div
-
-                initial={{
-                  opacity: 0,
-                  y: -10,
-                  scale: 0.95,
-                }}
-
-                animate={{
-                  opacity: 1,
-                  y: 0,
-                  scale: 1,
-                }}
-
-                exit={{
-                  opacity: 0,
-                  y: -10,
-                  scale: 0.95,
-                }}
-
-                transition={{
-                  duration: 0.2
-                }}
-
-                className="
-                  absolute
-                  top-20
-                  left-0
-                  w-full
-                  rounded-2xl
-                  border
-                  border-white/10
-                  bg-[#111827]/95
-                  backdrop-blur-2xl
-                  overflow-hidden
-                  z-[999]
-                  shadow-2xl
-                  shadow-black/50
-                "
-              >
-
-                {[
-                  "All",
-                  "planned",
-                  "completed",
-                ].map((option) => (
-
-                  <button
-                    key={option}
-
-                    onClick={() => {
-
-                      setStatusFilter(option)
-
-                      setIsFilterOpen(false)
-                    }}
-
-                    className={`
-                      w-full
-                      text-left
-                      px-5
-                      py-4
-                      transition-all
-                      duration-300
-
-                      ${
-                        statusFilter === option
-
-                          ? `
-                            bg-red-500/10
-                            text-red-300
-                          `
-
-                          : `
-                            text-gray-300
-                            hover:bg-white/5
-                            hover:text-white
-                          `
-                      }
-                    `}
-                  >
-
-                    {option.charAt(0)
-                      .toUpperCase() +
-                      option.slice(1)}
-
-                  </button>
-
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-20 left-0 w-full bg-[#111827] border border-white/10 rounded-2xl overflow-hidden shadow-2xl z-[100]">
+                {["All", "Planned", "Submitted", "Approved", "Rejected"].map(opt => (
+                  <button key={opt} onClick={() => setStatusFilter(opt)} className="w-full text-left px-6 py-4 text-gray-300 hover:bg-red-500/10 hover:text-red-400 transition-colors border-b border-white/5 last:border-0">{opt}</button>
                 ))}
-
               </motion.div>
-
             )}
-
           </AnimatePresence>
-
         </div>
-
       </div>
 
-      {/* Loading */}
+      {/* TASK ASSIGNMENT */}
+{profile?.role !== "warrior" && (
+  <div className="rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-xl">
+    <div className="flex items-center justify-between mb-6">
+      <div>
+        <h2 className="text-3xl font-black text-white">
+          Assign New Task
+        </h2>
 
-      {loading && (
+        <p className="text-gray-400 mt-2">
+          Create and assign activities to teams.
+        </p>
+      </div>
+    </div>
 
-        <div className="
-          text-center
-          text-gray-400
-          py-20
-          text-xl
-        ">
-          Loading activities...
+    <button
+    data-testid="assign-task-btn"
+      onClick={() => {
+        setEditingActivity(null);
+        setIsModalOpen(true);
+      }}
+      className="px-8 py-4 rounded-2xl bg-gradient-to-r from-red-500 to-pink-500 text-white font-bold shadow-lg shadow-red-500/30 hover:scale-105 transition-all"
+    >
+      + Assign Task
+    </button>
+    <div className="mt-6 flex gap-4">
+
+<div className="flex gap-4 mt-6">
+
+  {/* ALL */}
+  <button
+    onClick={() => setTaskFilter("all")}
+    className={`
+      px-6 py-3 rounded-2xl font-bold transition-all
+      ${
+        taskFilter === "all"
+          ? "bg-gradient-to-r from-pink-500 to-red-500 text-white shadow-lg shadow-pink-500/20"
+          : "bg-white/5 text-gray-400 hover:bg-white/10"
+      }
+    `}
+  >
+    All Tasks
+  </button>
+
+  {/* INDIVIDUAL */}
+  <button
+    onClick={() => setTaskFilter("individual")}
+    className={`
+      px-6 py-3 rounded-2xl font-bold transition-all
+      ${
+        taskFilter === "individual"
+          ? "bg-gradient-to-r from-pink-500 to-red-500 text-white shadow-lg shadow-pink-500/20"
+          : "bg-white/5 text-gray-400 hover:bg-white/10"
+      }
+    `}
+  >
+    Individual Tasks
+  </button>
+
+  {/* TEAM */}
+  <button
+    onClick={() => setTaskFilter("team")}
+    className={`
+      px-6 py-3 rounded-2xl font-bold transition-all
+      ${
+        taskFilter === "team"
+          ? "bg-gradient-to-r from-pink-500 to-red-500 text-white shadow-lg shadow-pink-500/20"
+          : "bg-white/5 text-gray-400 hover:bg-white/10"
+      }
+    `}
+  >
+    Team Tasks
+  </button>
+
+</div>
+
+</div>
+  </div>
+)}
+
+      {/* GRID */}
+      {loading ? (
+        <div className="py-20 text-center text-gray-500">Initializing Neural Feed...</div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
+          {filtered
+  .filter((activity) => {
+
+    if (taskFilter === "all") {
+      return true;
+    }
+
+    return (
+      activity.assignment_type === taskFilter
+    );
+
+  })
+  .map((activity, index) => (
+            <ActivityCard 
+              key={activity.id} 
+              activity={activity} 
+              index={index} 
+              onDelete={handleDelete}
+              onEdit={(a) => { setEditingActivity(a); setIsModalOpen(true); }}
+              onUpdate={updateTaskField}
+              isAdmin={profile?.role !== "warrior"}
+              submissions={submissions}
+              setSubmissions={setSubmissions}
+              onSubmit={(id) => handleSubmitTask(id)}
+            />
+          ))}
         </div>
       )}
 
-      {/* Activities */}
-
-      {!loading && (
-
-        <div className="
-          relative
-          z-0
-          grid
-          grid-cols-3
-          gap-8
-        ">
-
-          {filteredActivities.length === 0 ? (
-
-            <div className="
-              col-span-3
-              flex
-              items-center
-              justify-center
-              py-24
-            ">
-
-              <motion.div
-
-                initial={{
-                  opacity: 0,
-                  scale: 0.9,
-                }}
-
-                animate={{
-                  opacity: 1,
-                  scale: 1,
-                }}
-
-                className="
-                  relative
-                  overflow-hidden
-                  rounded-3xl
-                  border
-                  border-white/10
-                  bg-[#111827]/80
-                  backdrop-blur-2xl
-                  p-12
-                  text-center
-                  shadow-2xl
-                  max-w-xl
-                  w-full
-                "
-              >
-
-                <div className="
-                  absolute
-                  -top-20
-                  left-1/2
-                  -translate-x-1/2
-                  w-60
-                  h-60
-                  bg-red-500/10
-                  blur-3xl
-                  rounded-full
-                " />
-
-                <div className="
-                  relative
-                  z-10
-                ">
-
-                  <div className="
-                    text-7xl
-                    mb-6
-                  ">
-                    🚀
-                  </div>
-
-                  <h2 className="
-                    text-3xl
-                    font-bold
-                    text-white
-                    mb-4
-                  ">
-                    No Activities Found
-                  </h2>
-
-                  <p className="
-                    text-gray-400
-                    mb-8
-                    leading-relaxed
-                  ">
-                    Try adjusting your filters
-                    or create a new activity
-                    to get started.
-                  </p>
-
-                  <motion.button
-
-                    whileHover={{
-                      scale: 1.05,
-                    }}
-
-                    whileTap={{
-                      scale: 0.95,
-                    }}
-
-                    onClick={() => {
-
-                      setEditingActivity(null)
-
-                      setIsModalOpen(true)
-                    }}
-
-                    className="
-                      px-6
-                      py-4
-                      rounded-2xl
-                      bg-gradient-to-r
-                      from-red-500
-                      to-pink-500
-                      text-white
-                      font-semibold
-                      shadow-lg
-                      shadow-red-500/30
-                    "
-                  >
-                    + Create Activity
-                  </motion.button>
-
-                </div>
-
-              </motion.div>
-
-            </div>
-
-          ) : (
-
-            filteredActivities.map((
-              activity,
-              index
-            ) => (
-
-              <motion.div
-                key={activity.id}
-
-                initial={{
-                  opacity: 0,
-                  y: 40,
-                }}
-
-                animate={{
-                  opacity: 1,
-                  y: 0,
-                }}
-
-                transition={{
-                  delay:
-                    index * 0.12,
-                }}
-
-                whileHover={{
-                  y: -10,
-                  scale: 1.02,
-                }}
-
-                className={`
-                  group
-                  relative
-                  rounded-3xl
-                  border
-                  border-red-500/10
-                  bg-gradient-to-br
-                  from-[#111827]
-                  to-[#1e293b]
-                  p-7
-                  shadow-2xl
-                  backdrop-blur-2xl
-                  
-                  ${
-                    activity.deadline &&
-
-                    new Date(activity.deadline)
-                    < new Date()
-
-                    &&
-
-                    activity.status !==
-                    "completed"
-
-                      ? `
-                        border-red-500
-                        shadow-red-500/40
-                      `
-
-                      : ""
-                  }
-
-                `}
-              >
-
-                <div className="
-                  absolute
-                  -top-20
-                  -right-20
-                  w-60
-                  h-60
-                  bg-red-500/10
-                  blur-3xl
-                  rounded-full
-                  opacity-50
-                  group-hover:opacity-100
-                  transition
-                  duration-500
-                " />
-
-                <div className="
-                  absolute
-                  bottom-0
-                  left-0
-                  w-full
-                  h-[2px]
-                  bg-gradient-to-r
-                  from-transparent
-                  via-red-500
-                  to-transparent
-                  opacity-0
-                  group-hover:opacity-100
-                  transition
-                  duration-500
-                " />
-
-                <div className="
-                  flex
-                  items-start
-                  justify-between
-                  mb-6
-                ">
-
-                  <div className="
-                    flex
-                    items-center
-                    gap-3
-                  ">
-
-                    <span className="
-                      px-4
-                      py-2
-                      rounded-full
-                      text-sm
-                      bg-red-500/10
-                      text-red-300
-                      border
-                      border-red-500/20
-                      backdrop-blur-xl
-                    ">
-                      {activity.activity_type}
-                    </span>
-
-                    <motion.button
-
-                      whileHover={{
-                        scale: 1.05,
-                      }}
-
-                      whileTap={{
-                        scale: 0.95,
-                      }}
-
-                      onClick={() =>
-                        handleStatusToggle(
-                          activity
-                        )
-                      }
-
-                      className={`
-                        px-4
-                        py-2
-                        rounded-full
-                        text-sm
-                        font-medium
-                        backdrop-blur-xl
-                        border
-                        transition-all
-                        duration-300
-
-                        ${
-                          activity.status ===
-                          "completed"
-
-                            ? `
-                              bg-green-500/10
-                              text-green-300
-                              border-green-500/20
-                            `
-
-                            : `
-                              bg-yellow-500/10
-                              text-yellow-300
-                              border-yellow-500/20
-                            `
-                        }
-                      `}
-                    >
-
-                      {activity.status}
-
-                    </motion.button>
-
-                  </div>
-
-{
-  profile?.role !==
-  "warrior" && (
-
-    <div className="
-      flex
-      items-center
-    ">
-
-      <motion.button
-
-        whileHover={{
-          scale: 1.1,
-        }}
-
-        whileTap={{
-          scale: 0.9,
-        }}
-
-        onClick={() => {
-
-          setEditingActivity(
-            activity
-          )
-
-          setIsModalOpen(true)
-        }}
-
-        className="
-          opacity-40
-          group-hover:opacity-100
-          transition-all
-          duration-300
-          w-11
-          h-11
-          rounded-2xl
-          bg-blue-500/10
-          border
-          border-blue-500/20
-          flex
-          items-center
-          justify-center
-          text-blue-400
-          hover:bg-blue-500/20
-          mr-3
-        "
-      >
-
-        <Pencil size={18} />
-
-      </motion.button>
-
-      <motion.button
-
-        whileHover={{
-          scale: 1.1,
-        }}
-
-        whileTap={{
-          scale: 0.9,
-        }}
-
-        onClick={() =>
-          handleDeleteActivity(
-            activity.id
-          )
-        }
-
-        className="
-          opacity-40
-          group-hover:opacity-100
-          transition-all
-          duration-300
-          w-11
-          h-11
-          rounded-2xl
-          bg-red-500/10
-          border
-          border-red-500/20
-          flex
-          items-center
-          justify-center
-          text-red-400
-          hover:bg-red-500/20
-        "
-      >
-
-        <Trash2 size={18} />
-
-      </motion.button>
-
+      <AddActivityModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        onCreateActivity={handleSaveActivity} 
+        editingActivity={editingActivity} 
+      />
     </div>
-
-  )
+  );
 }
-                
-</div>
-                <h2 className="
-                  text-2xl
-                  font-bold
-                  text-white
-                  mb-5
-                  leading-snug
-                ">
-                  {activity.title}
-                </h2>
 
-                <div className="
-                  mb-4
-                ">
+// SUB-COMPONENT: ACTIVITY CARD
+const ActivityCard = ({ activity, index, onDelete, onEdit, onUpdate, isAdmin, submissions, setSubmissions, onSubmit }) => {
+  const isOverdue = activity.deadline && new Date(activity.deadline) < new Date() && activity.status !== 'completed';
+  const daysLeft = activity.deadline ? Math.ceil((new Date(activity.deadline) - new Date()) / (86400000)) : null;
 
-                <span className={`
-                  px-4
-                  py-2
-                  rounded-full
-                  text-sm
-                  font-semibold
-                  border
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }}
+      className={`relative group rounded-3xl border ${isOverdue ? 'border-red-500 shadow-red-500/20' : 'border-white/10'} bg-[#111827] p-7 overflow-hidden`}>
+      
+      <div className="flex justify-between items-start mb-6">
+        <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20">{activity.activity_type}</span>
+        {isAdmin && (
+          <div className="flex gap-2">
+            <button onClick={() => onEdit(activity)} className="p-2 rounded-xl bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-all"><Pencil size={16} /></button>
+            <button onClick={() => onDelete(activity.id)} className="p-2 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all"><Trash2 size={16} /></button>
+          </div>
+        )}
+      </div>
 
-                   ${
-                     activity.priority === "high"
+      <h3 className="text-2xl font-bold text-white mb-4 leading-tight">{activity.title}</h3>
+      
+      {/* WORKFLOW STATUS */}
+<div className="mb-6 flex items-center justify-between">
 
-                       ? `
-                          bg-red-500/10
-                          text-red-300
-                          border-red-500/20
-                        `
-
-                        : activity.priority === "medium"
-
-                        ? `
-                          bg-yellow-500/10
-                          text-yellow-300
-                          border-yellow-500/20
-                        `
-
-                        : `
-                          bg-green-500/10
-                          text-green-300
-                          border-green-500/20
-                        `
-                    }
-                  `}>
-
-                    {activity.priority || "medium"} Priority
-
-                  </span>
-
-                </div>
-
-                {/* Progress Section */}
-
-<div className="
-  mb-6
-">
-
-  <div className="
-    flex
-    items-center
-    justify-between
-    mb-2
-  ">
-
-    <span className="
-      text-sm
-      text-gray-400
-    ">
-      Progress
-    </span>
-
-    <span className="
-      text-sm
-      text-red-400
-      font-semibold
-    ">
-      {activity.progress || 0}%
-    </span>
-
-  </div>
-
-  <div className="
-    w-full
-    h-3
-    rounded-full
-    bg-white/10
-    overflow-hidden
-  ">
+  <div>
+    <p className="text-xs text-gray-500 uppercase tracking-[0.2em] mb-2">
+      Mission Status
+    </p>
 
     <div
+      className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl border text-sm font-bold
+      ${
+        activity.status === "approved"
+          ? "bg-green-500/10 border-green-500/20 text-green-400"
+          : activity.status === "submitted"
+          ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
+          : activity.status === "rejected"
+          ? "bg-red-500/10 border-red-500/20 text-red-400"
+          : "bg-blue-500/10 border-blue-500/20 text-blue-400"
+      }`}
+    >
 
-      className="
-        h-full
-        rounded-full
-        bg-gradient-to-r
-        from-red-500
-        to-pink-500
-        transition-all
-        duration-500
-      "
+      <span className="w-2 h-2 rounded-full bg-current animate-pulse"></span>
 
-      style={{
-        width: `${
-          activity.progress || 0
-        }%`
-      }}
-    />
+{
+  activity.status === "approved" ? (
+    <span className="text-green-400">
+      Completed
+    </span>
+  ) : activity.status === "submitted" ? (
+    <span className="text-yellow-400">
+      Pending Review
+    </span>
+  ) : activity.status === "rejected" ? (
+    <span className="text-red-400">
+      Rejected
+    </span>
+  ) : (
+    <span className="text-blue-400">
+      Assigned
+    </span>
+  )
+}
 
+    </div>
   </div>
 
-  <div className="
-  flex
-  items-center
-  gap-3
-  mt-4
-">
-
-  <button
-
-    onClick={() =>
-      handleProgressUpdate(
-        activity,
-        -10
-      )
-    }
-
-    className="
-      px-4
-      py-2
-      rounded-xl
-      bg-white/5
-      border
-      border-white/10
-      text-white
-      hover:bg-white/10
-      transition
-    "
-  >
-    -10%
-  </button>
-
-  <button
-
-    onClick={() =>
-      handleProgressUpdate(
-        activity,
-        10
-      )
-    }
-
-    className="
-      px-4
-      py-2
-      rounded-xl
-      bg-red-500/10
-      border
-      border-red-500/20
-      text-red-300
-      hover:bg-red-500/20
-      transition
-    "
-  >
-    +10%
-  </button>
-
 </div>
 
-<div className="
-  mt-4
-  p-4
-  rounded-2xl
-  bg-white/5
-  border
-  border-white/10
-">
+      {/* Meta Info */}
+      <div className="space-y-3 text-sm text-gray-400">
+        <div className="flex items-center gap-2"><CalendarDays size={16} /> {activity.activity_date}</div>
+        <div className="flex items-center gap-2"><MapPin size={16} /> {activity.venue}</div>
+        <div className="flex items-center gap-2"><Users size={16} /> {activity.audience_count} participants</div>
+        <div className="pt-2 border-t border-white/5 flex justify-between items-center">
+          <span className="text-red-400/80 font-medium">
 
-  <p className="
-    text-sm
-    text-gray-300
-    leading-relaxed
-  ">
+  Assigned: {
 
-    {
+    activity.assignment_type === "team"
 
-      activity.progress >= 100
+      ? activity.teams?.team_name || "Team"
 
-        ? "✅ AI Insight: Task completed successfully."
+      : activity.assigned_user_name || "Warrior"
 
-        : activity.progress >= 70
+  }
 
-        ? "⚡ AI Insight: You're close to completion. Keep momentum high."
+</span>
+          {daysLeft !== null && <span className={`font-bold ${daysLeft < 0 ? 'text-red-500' : 'text-green-500'}`}>{daysLeft < 0 ? 'Overdue' : `${daysLeft}d left`}</span>}
+        </div>
+      </div>
+{/* PREMIUM MISSION SUBMISSION UI */}
+{!isAdmin && activity.status !== 'completed' && activity.status !== 'approved' && (
 
-        : activity.progress >= 40
+  <div className="mt-4 rounded-2xl border border-pink-500/20 bg-white/[0.03] backdrop-blur-xl p-4">
 
-        ? "📈 AI Insight: Steady progress detected. Stay consistent."
+    {/* HEADER */}
+    <div className="flex items-center justify-between mb-4">
 
-        : "🚨 AI Insight: You're behind schedule. Increase progress to stay on track."
+      <div>
+        <p className="text-[11px] font-black tracking-[0.25em] text-pink-400 uppercase">
+          Mission Submission
+        </p>
 
-    }
+        <h3 className="text-white font-bold text-lg mt-1">
+          Upload Completion Proof
+        </h3>
+      </div>
 
-  </p>
-
-</div>
-
-</div>
-
-                <div className="
-                  space-y-4
-                ">
-
-                  <div className="
-                    flex
-                    items-center
-                    gap-3
-                    text-gray-400
-                  ">
-                    <CalendarDays size={18} />
-
-                    <span>
-                      {activity.activity_date}
-                    </span>
-
-                  </div>
-
-                  {
-  activity.deadline && (
-
-    <div className="
-      flex
-      items-center
-      gap-3
-      text-sm
-    ">
-
-      <span className="
-        text-red-400
-        font-semibold
-      ">
-        Deadline:
-      </span>
-
-      <span className="
-        text-gray-300
-      ">
-
-        {
-
-          Math.ceil(
-
-            (
-              new Date(activity.deadline)
-              - new Date()
-            )
-
-            /
-
-            (
-              1000 * 60 * 60 * 24
-            )
-
-          ) > 0
-
-            ? `${Math.ceil(
-
-                (
-                  new Date(activity.deadline)
-                  - new Date()
-                )
-
-                /
-
-                (
-                  1000 * 60 * 60 * 24
-                )
-
-              )} days left`
-
-            : `Overdue by ${Math.abs(
-
-                Math.ceil(
-
-                  (
-                    new Date(activity.deadline)
-                    - new Date()
-                  )
-
-                  /
-
-                  (
-                    1000 * 60 * 60 * 24
-                  )
-
-                )
-
-              )} days`
-        }
-
-      </span>
+      <div className="w-12 h-12 rounded-2xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400 text-xl">
+        ⬆
+      </div>
 
     </div>
-  )
-}
 
-                  <div className="
-                    flex
-                    items-center
-                    gap-3
-                    text-gray-400
-                  ">
-                    <MapPin size={18} />
+    {/* FILE UPLOAD */}
+    <label className="group cursor-pointer block">
 
-                    <span>
-                      {activity.venue}
-                    </span>
+      <div className="border border-dashed border-pink-500/20 hover:border-pink-400/40 transition-all rounded-xl p-3 bg-black/20">
 
-                  </div>
+        <div className="flex flex-col items-center justify-center text-center">
 
-                  <div className="
-                    flex
-                    items-center
-                    gap-3
-                    text-gray-400
-                  ">
-                    <Users size={18} />
+          <div className="w-10 h-10 rounded-2xl bg-pink-500/10 flex items-center justify-center text-2xl text-pink-400 mb-3">
+            📄
+          </div>
 
-                    <span>
-                      {
-                        activity.audience_count
-                      }
-                      {" "}
-                      Participants
-                    </span>
+          <p className="text-white font-semibold">
+            Click to Upload Proof
+          </p>
 
-                  </div>
+          <p className="text-gray-400 text-sm mt-1">
+            PDF, Images, Docs, Drive Links
+          </p>
 
-                  <div className="
-                      flex
-                      items-center
-                      gap-3
-                      text-gray-400
-                    ">
-
-                  <span className="
-                      text-red-400
-                      font-semibold
-                    ">
-                    Assigned To:
-                  </span>
-
-                      <span>
-                        {activity.assigned_user_name || "Unassigned"}
-                      </span>
-
-                    </div>
-
-                    {
-  activity.deadline &&
-
-  new Date(activity.deadline)
-  < new Date()
-
-  &&
-
-  activity.status !==
-  "completed"
-
-  && (
-
-    <div className="
-      mt-4
-      px-4
-      py-3
-      rounded-2xl
-      bg-red-500/10
-      border
-      border-red-500/20
-      text-red-300
-      font-medium
-    ">
-
-      🚨 This task is overdue
-
-    </div>
-  )
-}
-
-                </div>
-
-              </motion.div>
-
-            ))
-
+          {submissions?.[activity.id]?.proofFile&& (
+            <div className="mt-4 px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-sm font-medium">
+              {submissions[activity.id].proofFile.name}
+            </div>
           )}
 
         </div>
-      )}
 
-      <AddActivityModal
-        isOpen={isModalOpen}
+        <input
+          type="file"
+          accept=".pdf,image/*"
+          className="hidden"
+          onChange={(e) =>
+           setSubmissions(prev => ({
+  ...prev,
+  [activity.id]: {
+    ...prev[activity.id],
+    proofFile: e.target.files[0]
+  }
+}))
+          }
+        />
 
-        onClose={() => {
+      </div>
 
-          setIsModalOpen(false)
+    </label>
 
-          setEditingActivity(null)
-        }}
+    {/* REMARKS */}
+    <div className="mt-5">
 
-        onCreateActivity={
-          editingActivity
-            ? handleUpdateActivity
-            : handleCreateActivity
+      <textarea
+        rows="2"
+        placeholder="Describe your work, add GitHub links, Drive links, completion notes..."
+        onChange={(e) =>
+          setSubmissions(prev => ({
+  ...prev,
+  [activity.id]: {
+    ...prev[activity.id],
+    remarks: e.target.value
+  }
+}))
         }
-
-        editingActivity={
-          editingActivity
-        }
+        className="w-full rounded-2xl bg-black/20 border border-white/10 focus:border-pink-500/40 outline-none text-white px-5 py-4 placeholder:text-gray-500 resize-none transition-all"
       />
 
     </div>
-  )
-}
 
-export default TasksPage
+    {/* SUBMIT BUTTON */}
+    {console.log("ACTIVITY DATA:", activity)}
+    <button
+      onClick={() => onSubmit(activity.id)}
+      className="mt-5 w-full rounded-2xl bg-gradient-to-r from-pink-500 to-red-500 hover:scale-[1.02] transition-all duration-300 text-white font-black tracking-wide py-3 shadow-[0_0_30px_rgba(255,0,128,0.25)]"
+    >
+      Submit Proof →
+    </button>
+
+  </div>
+)}
+
+{/* ADMIN REVIEW PANEL */}
+{isAdmin && activity.status === "submitted" && (
+
+  <div className="mt-6 rounded-3xl border border-yellow-500/20 bg-yellow-500/[0.04] backdrop-blur-xl p-5">
+
+    {/* HEADER */}
+    <div className="flex items-center justify-between mb-5">
+
+      <div>
+
+        <p className="text-[11px] font-black tracking-[0.25em] text-yellow-400 uppercase">
+          Pending Approval
+        </p>
+
+        <h3 className="text-white font-bold text-lg mt-1">
+          Submission Awaiting Review
+        </h3>
+
+      </div>
+
+      <div className="w-12 h-12 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-2xl">
+        ⚠️
+      </div>
+
+    </div>
+
+    {/* REMARKS */}
+    <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
+
+      <p className="text-xs uppercase tracking-[0.2em] text-gray-500 mb-2">
+        Warrior Remarks
+      </p>
+
+      <p className="text-gray-300 text-sm leading-relaxed">
+        {activity.remarks || "No remarks provided."}
+      </p>
+
+    </div>
+
+    {/* ACTIONS */}
+    <div className="mt-5 flex flex-wrap gap-3">
+
+      {/* VIEW PROOF */}
+      {activity.proof_url && (
+        <a
+          href={activity.proof_url}
+          target="_blank"
+          rel="noreferrer"
+          className="px-5 py-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 font-bold hover:bg-blue-500/20 transition-all"
+        >
+          View Proof
+        </a>
+      )}
+
+      {/* APPROVE */}
+      <button
+        onClick={() =>
+          onUpdate(activity, {
+            status: "approved"
+          })
+        }
+        className="px-5 py-3 rounded-2xl bg-green-500/10 border border-green-500/20 text-green-400 font-bold hover:bg-green-500/20 transition-all"
+      >
+        Approve
+      </button>
+
+      {/* REJECT */}
+      <button
+        onClick={() => {
+
+          const reason = prompt(
+            "Enter rejection reason"
+          );
+
+          if (!reason) return;
+
+onUpdate(activity, {
+  status: "rejected",
+  rejection_reason: reason,
+  proof_url: null,
+  completion_date: null
+});
+
+        }}
+        className="px-5 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold hover:bg-red-500/20 transition-all"
+      >
+        Reject
+      </button>
+
+    </div>
+
+  </div>
+
+)}
+      
+      {activity.status === 'approved' && (
+
+  <div className="mt-6 rounded-3xl border border-green-500/20 bg-green-500/[0.05] backdrop-blur-xl p-5">
+
+    {/* HEADER */}
+    <div className="flex items-center justify-between mb-5">
+
+      <div>
+        <p className="text-[11px] font-black tracking-[0.25em] text-green-400 uppercase">
+          Mission Completed
+        </p>
+
+        <h3 className="text-white font-bold text-lg mt-1">
+          Proof Successfully Verified
+        </h3>
+      </div>
+
+      <div className="w-12 h-12 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center text-2xl text-green-400">
+        ✓
+      </div>
+
+    </div>
+
+    {/* SUCCESS PANEL */}
+    <div className="rounded-2xl border border-green-500/10 bg-black/20 p-5">
+
+      <div className="flex items-center justify-between">
+
+        <div>
+          <p className="text-white font-semibold">
+            Mission Approved
+          </p>
+
+          <p className="text-gray-400 text-sm mt-1">
+            President verified your submission successfully.
+          </p>
+        </div>
+
+        <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center text-3xl text-green-400">
+          🏆
+        </div>
+
+      </div>
+
+      {/* VIEW PROOF */}
+      {activity.proof_url && (
+        <a
+          href={activity.proof_url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-5 inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-green-500/10 hover:bg-green-500/20 transition-all border border-green-500/20 text-green-400 font-semibold"
+        >
+          View Submitted Proof →
+        </a>
+      )}
+
+    </div>
+
+  </div>
+)}
+
+      {activity.status === 'rejected' && (
+  <div className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+
+    <p className="text-[10px] font-bold text-red-500 uppercase mb-2">
+      Rejected
+    </p>
+
+    <p className="text-sm text-red-200">
+      {activity.rejection_reason || "No feedback provided."}
+    </p>
+
+  </div>
+)}
+    </motion.div>
+  );
+};
+
+export default TasksPage;

@@ -27,6 +27,8 @@ import AdminPage from "./pages/admin/AdminPage"
 
 import PresidentDashboard from "./pages/dashboard/PresidentDashboard"
 
+import TeamsPage from "./pages/activities/TeamsPage"
+
 import WarriorDashboard from "./pages/dashboard/WarriorDashboard"
 
 function App() {
@@ -157,7 +159,7 @@ function App() {
 
       ? <AdminDashboard />
 
-      : profile?.role === "president"
+      : profile?.role === "college_coordinator"
 
       ? <PresidentDashboard />
 
@@ -169,6 +171,11 @@ function App() {
     path="/activities"
     element={<TasksPage />}
   />
+
+  <Route
+  path="/team-management"
+  element={<TeamsPage profile={profile} />}
+/>
 
   <Route
     path="/analytics"
