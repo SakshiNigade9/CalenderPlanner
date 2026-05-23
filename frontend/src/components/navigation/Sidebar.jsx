@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo } from "react";
+import { School } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LayoutDashboard, BarChart3, FileText, Settings, Activity, LogOut, UserCircle2, Crown, Bell, Users, } from "lucide-react";
+import { LayoutDashboard, BarChart3, FileText, Settings, Activity, LogOut, UserCircle2, Crown, Bell, Users, Building, } from "lucide-react";
 import toast from "react-hot-toast";
 import { supabase } from "../../lib/supabase";
 
@@ -11,7 +12,18 @@ const menuItems = [
   { title: "My Tasks", icon: Activity,path: "/activities",roles: ["warrior"] },
   // PRESIDENT + ADMIN
   { title: "Task Management", icon: Activity, path: "/activities", roles: ["admin", "president"] },
-  { title: "Team Management", icon: Users, path: "/team-management", roles: ["admin", "president"] },
+  {
+  title: "Team Management",
+  icon: Building,
+  path: "/teams",
+  roles: ["president"],
+},
+ {
+  title: "College Management",
+  icon: School,
+  path: "/college-management",
+  roles: ["admin"],
+},
   { title: "Analytics", icon: BarChart3, path: "/analytics", roles: ["admin", "president"] },
   { title: "Reports", icon: FileText, path: "/reports", roles: ["admin", "president"] },
   { title: "Admin Panel", icon: Crown, path: "/admin", roles: ["admin"]},

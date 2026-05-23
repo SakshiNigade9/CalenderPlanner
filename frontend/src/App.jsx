@@ -10,6 +10,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "./lib/supabase"
 
 import AdminDashboard from "./pages/dashboard/AdminDashboard"
+import CollegeManagementPage from "./pages/admin/CollegeManagementPage";
 
 import TasksPage from "./pages/activities/TasksPage"
 
@@ -209,7 +210,10 @@ function App() {
       : <Navigate to="/" />
   }
 />
-
+<Route
+  path="/college-management"
+  element={<CollegeManagementPage />}
+/>
 </Routes>
         </main>
 
