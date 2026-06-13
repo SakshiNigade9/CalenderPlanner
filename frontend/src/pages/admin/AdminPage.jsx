@@ -12,6 +12,9 @@ function AdminPage() {
   const [colleges, setColleges] = useState([]);
   const [presidents, setPresidents] = useState([]);
 
+// change: selected college for drill down modal
+  const [selectedCollege, setSelectedCollege] = useState(null);
+
   const fetchAdminData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -160,11 +163,20 @@ const [usersRes, activitiesRes, collegesRes, presidentsRes] = await Promise.all(
   animate={{ opacity: 1, y: 0 }}
   className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-2xl p-8"
 >
-
-  <h2 className="text-3xl font-bold text-white mb-8">
-    College Chapters
-  </h2>
-
+  <div className="flex items-center justify-between mb-8">
+    <div>
+      <h2 className="text-3xl font-bold text-white">
+        College Chapters
+      </h2>
+      <p className="text-gray-500 text-sm mt-1">
+        Click any college card to view teams, task records & proof submissions.
+      </p>
+    </div>
+    <span className="px-4 py-2 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm font-bold">
+      {colleges.length} Colleges
+    </span>
+  </div>
+  
   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
 
     {colleges.map((college) => {
@@ -180,75 +192,81 @@ const [usersRes, activitiesRes, collegesRes, presidentsRes] = await Promise.all(
           p.college_id === college.id &&
           p.role === "college_coordinator"
       );
+      const collegeTasks = activities.filter(
+        a => a.assigned_college_id === college.id
+      );
+      const approvedCount = collegeTasks.filter(t => t.status === "approved").length;
+      const proofCount = collegeTasks.filter(t => t.proof_url).length;
 
       return (
 
         <div
           key={college.id}
-          className="rounded-3xl border border-yellow-500/10 bg-black/20 p-6"
+          className="rounded-3xl border border-yellow-500/10 bg-black/20 p-6 hover:border-yellow-500/30 hover:bg-black/30 transition-all group cursor-pointer"
+          onClick={() => setSelectedCollege(college)}   // ← CHANGE 2: open modal on click
         >
 
-          <h3 className="text-2xl font-black text-white mb-4">
-            {college.name}
-          </h3>
+          {/* COLLEGE NAME + CLICK CUE */}
+          <div className="flex items-start justify-between mb-4">
+            <h3 className="text-2xl font-black text-white group-hover:text-yellow-400 transition-colors">
+              {college.name}
+            </h3>
+            <span className="text-[10px] font-black uppercase tracking-widest text-yellow-500/50 group-hover:text-yellow-400 transition-colors pt-1">
+              View →
+            </span>
+          </div>
 
           <div className="space-y-3">
 
             <select
+              className="w-full mt-1 rounded-xl bg-[#0a1022] border border-white/10 px-4 py-3 text-white"
+              value={college.president_id || ""}
+              onClick={(e) => e.stopPropagation()}   // prevent modal opening when using select
+              onChange={async (e) => {
+                e.stopPropagation();
+                const presidentId = e.target.value;
 
-  className="w-full mt-4 rounded-xl bg-[#0a1022] border border-white/10 px-4 py-3 text-white"
+                const { error } = await supabase
+                  .from("colleges")
+                  .update({
+                    president_id: presidentId
+                  })
+                  .eq("id", college.id);
 
-  value={college.president_id || ""}
+                if (error) {
+                  console.log("PRESIDENT ASSIGN ERROR:", error);
+                  alert(error.message);
+                  return;
+                }
 
-  onChange={async (e) => {
+                setColleges((prev) =>
+                  prev.map((c) =>
+                    c.id === college.id
+                      ? { ...c, president_id: presidentId }
+                      : c
+                  )
+                );
 
-    const presidentId = e.target.value;
+                console.log("PRESIDENT ASSIGNED");
+              }}
+            >
 
-    const { error } = await supabase
-      .from("colleges")
-      .update({
-        president_id: presidentId
-      })
-      .eq("id", college.id);
+              <option value="">
+                Assign President
+              </option>
 
-    if (error) {
+              {presidents.map((president) => (
 
-      console.log("PRESIDENT ASSIGN ERROR:", error);
+                <option
+                  key={president.id}
+                  value={president.id}
+                >
+                  {president.full_name}
+                </option>
 
-      alert(error.message);
+              ))}
 
-      return;
-    }
-
-    setColleges((prev) =>
-      prev.map((c) =>
-        c.id === college.id
-          ? { ...c, president_id: presidentId }
-          : c
-      )
-    );
-
-    console.log("PRESIDENT ASSIGNED");
-  }}
-
->
-
-  <option value="">
-    Assign President
-  </option>
-
-  {presidents.map((president) => (
-
-    <option
-      key={president.id}
-      value={president.id}
-    >
-      {president.full_name}
-    </option>
-
-  ))}
-
-</select>
+            </select>
 
             <div>
               <p className="text-gray-500 text-sm">
@@ -270,6 +288,22 @@ const [usersRes, activitiesRes, collegesRes, presidentsRes] = await Promise.all(
               </p>
             </div>
 
+            {/* ── CHANGE 2: quick stats on card ── */}
+            <div className="pt-3 mt-2 border-t border-white/5 grid grid-cols-3 gap-2 text-center">
+              <div>
+                <p className="text-xs text-gray-600">Tasks</p>
+                <p className="text-white font-black">{collegeTasks.length}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Approved</p>
+                <p className="text-green-400 font-black">{approvedCount}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Proofs</p>
+                <p className="text-yellow-400 font-black">{proofCount}</p>
+              </div>
+            </div>
+
           </div>
 
         </div>
@@ -280,6 +314,14 @@ const [usersRes, activitiesRes, collegesRes, presidentsRes] = await Promise.all(
   </div>
 
 </motion.div>
+
+      {/* ── CHANGE 2: College Detail Modal ── */}
+      {selectedCollege && (
+        <CollegeDetailModal
+          college={selectedCollege}
+          onClose={() => setSelectedCollege(null)}
+        />
+      )}
     </div>
   );
 }
