@@ -274,8 +274,6 @@ const addWarriorToTeam = async () => {
       activity_date: activityData.start_date,
       venue: activityData.location,
       audience_count: Number(activityData.participants) || 0,
-      description: activityData.description || "",
-      priority: activityData.priority || "medium",
       deadline: activityData.deadline || null,
 assigned_to:
   activityData.assignment_type === "individual"
