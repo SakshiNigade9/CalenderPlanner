@@ -1,9 +1,23 @@
 import { useEffect, useState, useCallback } from "react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { CalendarDays, MapPin, Users, Search, Filter, Trash2, Pencil } from "lucide-react";
+import { CalendarDays, MapPin, Users, Search, Filter, Trash2, Pencil, Clock } from "lucide-react";
 import AddActivityModal from "../../components/modals/AddActivityModal";
 import { supabase } from "../../lib/supabase";
+
+// ─── HELPER: Format ISO date string into readable "DD MMM YYYY, HH:MM AM/PM" ───
+function formatSubmissionDate(isoString) {
+  if (!isoString) return null;
+  const d = new Date(isoString);
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
 
 function TasksPage() {
   const [submissions, setSubmissions] = useState({});
@@ -71,7 +85,7 @@ function TasksPage() {
     if (!error) setActivities(data || []);
     setLoading(false);
   }, []);
-  const fetchTasks = fetchActivities; // This redirects the "wrong" name to the "right" function
+  const fetchTasks = fetchActivities;
 
   useEffect(() => {
 
@@ -126,13 +140,16 @@ if (!currentSubmission?.proofFile) {
 
     const proofUrl = data.publicUrl;
 
+    // ── CHANGE: capture exact submission timestamp ──
+    const submissionTimestamp = new Date().toISOString();
+
 const { data: updatedTask, error } = await supabase
   .from("tasks")
   .update({
     status: "submitted",
     remarks: currentSubmission?.remarks,
     proof_url: proofUrl,
-    completion_date: new Date().toISOString()
+    completion_date: submissionTimestamp,   // records when warrior submitted
   })
   .eq("id", taskId)
   .select();
@@ -613,8 +630,9 @@ const ActivityCard = ({ activity, index, onDelete, onEdit, onUpdate, isAdmin, su
           {daysLeft !== null && <span className={`font-bold ${daysLeft < 0 ? 'text-red-500' : 'text-green-500'}`}>{daysLeft < 0 ? 'Overdue' : `${daysLeft}d left`}</span>}
         </div>
       </div>
+
 {/* PREMIUM MISSION SUBMISSION UI */}
-{!isAdmin && activity.status !== 'completed' && activity.status !== 'approved' && (
+{!isAdmin && activity.status !== 'completed' && activity.status !== 'approved' && activity.status !== 'submitted' && (
 
   <div className="mt-4 rounded-2xl border border-pink-500/20 bg-white/[0.03] backdrop-blur-xl p-4">
 
@@ -656,7 +674,7 @@ const ActivityCard = ({ activity, index, onDelete, onEdit, onUpdate, isAdmin, su
             PDF, Images, Docs, Drive Links
           </p>
 
-          {submissions?.[activity.id]?.proofFile&& (
+          {submissions?.[activity.id]?.proofFile && (
             <div className="mt-4 px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-sm font-medium">
               {submissions[activity.id].proofFile.name}
             </div>
@@ -704,7 +722,6 @@ const ActivityCard = ({ activity, index, onDelete, onEdit, onUpdate, isAdmin, su
     </div>
 
     {/* SUBMIT BUTTON */}
-    {console.log("ACTIVITY DATA:", activity)}
     <button
       onClick={() => onSubmit(activity.id)}
       className="mt-5 w-full rounded-2xl bg-gradient-to-r from-pink-500 to-red-500 hover:scale-[1.02] transition-all duration-300 text-white font-black tracking-wide py-3 shadow-[0_0_30px_rgba(255,0,128,0.25)]"
@@ -712,6 +729,50 @@ const ActivityCard = ({ activity, index, onDelete, onEdit, onUpdate, isAdmin, su
       Submit Proof →
     </button>
 
+  </div>
+)}
+
+{/* ── CHANGE 1: SUBMITTED STATE — show "awaiting review" + submission timestamp to warrior ── */}
+{!isAdmin && activity.status === 'submitted' && (
+  <div className="mt-4 rounded-2xl border border-yellow-500/20 bg-yellow-500/[0.04] backdrop-blur-xl p-4">
+
+    <div className="flex items-center justify-between mb-3">
+      <div>
+        <p className="text-[11px] font-black tracking-[0.25em] text-yellow-400 uppercase">
+          Proof Submitted
+        </p>
+        <h3 className="text-white font-bold text-base mt-1">
+          Awaiting President Review
+        </h3>
+      </div>
+      <div className="w-10 h-10 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-xl">
+        ⏳
+      </div>
+    </div>
+
+    {/* ── SUBMISSION TIMESTAMP ── */}
+    {activity.completion_date && (
+      <div className="flex items-center gap-2 mt-3 px-4 py-3 rounded-xl bg-black/20 border border-yellow-500/10">
+        <Clock size={14} className="text-yellow-400 shrink-0" />
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">Submitted On</p>
+          <p className="text-yellow-300 text-sm font-semibold">
+            {formatSubmissionDate(activity.completion_date)}
+          </p>
+        </div>
+      </div>
+    )}
+
+    {activity.proof_url && (
+      
+        href={activity.proof_url}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-yellow-500/10 hover:bg-yellow-500/20 transition-all border border-yellow-500/20 text-yellow-400 text-sm font-semibold"
+      >
+        View Your Submitted Proof →
+      </a>
+    )}
   </div>
 )}
 
@@ -736,10 +797,23 @@ const ActivityCard = ({ activity, index, onDelete, onEdit, onUpdate, isAdmin, su
       </div>
 
       <div className="w-12 h-12 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-2xl">
-        ⚠️
+        
       </div>
 
     </div>
+
+    {/* ── CHANGE 1: SUBMISSION TIMESTAMP visible to Admin/President ── */}
+    {activity.completion_date && (
+      <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-black/20 border border-yellow-500/10">
+        <Clock size={14} className="text-yellow-400 shrink-0" />
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">Submitted On</p>
+          <p className="text-yellow-300 text-sm font-semibold">
+            {formatSubmissionDate(activity.completion_date)}
+          </p>
+        </div>
+      </div>
+    )}
 
     {/* REMARKS */}
     <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
@@ -759,7 +833,7 @@ const ActivityCard = ({ activity, index, onDelete, onEdit, onUpdate, isAdmin, su
 
       {/* VIEW PROOF */}
       {activity.proof_url && (
-        <a
+        
           href={activity.proof_url}
           target="_blank"
           rel="noreferrer"
@@ -854,9 +928,22 @@ onUpdate(activity, {
 
       </div>
 
+      {/* ── CHANGE 1: Show submission date on approved card too ── */}
+      {activity.completion_date && (
+        <div className="flex items-center gap-2 mt-4 px-4 py-3 rounded-xl bg-black/20 border border-green-500/10">
+          <Clock size={14} className="text-green-400 shrink-0" />
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">Submitted On</p>
+            <p className="text-green-300 text-sm font-semibold">
+              {formatSubmissionDate(activity.completion_date)}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* VIEW PROOF */}
       {activity.proof_url && (
-        <a
+        
           href={activity.proof_url}
           target="_blank"
           rel="noreferrer"
