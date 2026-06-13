@@ -112,6 +112,7 @@ const { data, error } = await query;
         status: "submitted",
         proof_url: proofUrl,
         remarks: remarks,
+        completion_date: new Date().toISOString(), // added to show date of submission
       })
       .eq("id", activityId);
 
